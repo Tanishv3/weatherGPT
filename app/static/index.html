@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>WeatherGPT</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 16px;
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+  h1 { font-size: 1.25rem; margin-bottom: 4px; }
+  h2 { font-size: 0.95rem; margin: 20px 0 8px; color: #cbd5e1; }
+  #status { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; }
+  #log {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 50vh;
+    overflow-y: auto;
+    padding: 12px;
+    background: #1e293b;
+    border-radius: 10px;
+    margin-bottom: 12px;
+  }
+  .msg { padding: 8px 12px; border-radius: 10px; max-width: 80%; white-space: pre-wrap; line-height: 1.4; }
+  .user { align-self: flex-end; background: #2563eb; color: white; }
+  .bot { align-self: flex-start; background: #334155; }
+  .typing { align-self: flex-start; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
+  .alert { align-self: center; background: #7c2d12; color: #fed7aa; border: 1px solid #ea580c; font-size: 0.9rem; max-width: 95%; }
+  form { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155;
+    background: #1e293b; color: #e2e8f0; font-size: 1rem;
+  }
+  button {
+    padding: 10px 16px; border-radius: 8px; border: none;
+    background: #2563eb; color: white; font-size: 1rem; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .examples { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; }
+  .examples button {
+    background: #334155; font-size: 0.75rem; padding: 4px 8px; margin: 2px;
+  }
+  #live-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .city-card {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.8rem;
+    border: 1px solid #334155;
+  }
+  .city-card.severe { border-color: #ea580c; background: #431407; }
+  .city-card .name { font-weight: 600; margin-bottom: 4px; }
+  .city-card .cond { color: #94a3b8; }
+  .city-card .temp { font-size: 1.1rem; margin-top: 4px; }
+  #live-updated { font-size: 0.7rem; color: #64748b; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <h1>🌦️ WeatherGPT</h1>
+  <div id="status">connecting…</div>
+  <div id="log"></div>
+  <form id="form">
+    <input id="input" type="text" placeholder="Ask about weather anywhere…" autocomplete="off" />
+    <button id="send" type="submit">Send</button>
+  </form>
+  <div class="examples">
+    Try:
+    <button type="button" data-q="will it rain in Pune tomorrow?">rain in Pune tomorrow?</button>
+    <button type="button" data-q="any cyclone alert for Chennai">cyclone alert Chennai</button>
+    <button type="button" data-q="crop advisory for Nashik">crop advisory Nashik</button>
+  </div>
+
+  <h2>📡 Live across India <span id="live-updated"></span></h2>
+  <div id="live-grid">Loading…</div>
+
+<script>
+const log = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const liveGrid = document.getElementById('live-grid');
+const liveUpdated = document.getElementById('live-updated');
+
+function addMsg(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+
+let typingEl = null;
+
+ws.onopen = () => { statusEl.textContent = 'connected'; };
+ws.onclose = () => { statusEl.textContent = 'disconnected — refresh to reconnect'; sendBtn.disabled = true; };
+ws.onerror = () => { statusEl.textContent = 'connection error'; };
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type === 'status' && msg.status === 'thinking') {
+    typingEl = addMsg('WeatherGPT is thinking…', 'typing');
+    return;
+  }
+  if (msg.type === 'reply') {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+    addMsg(msg.reply, 'bot');
+    sendBtn.disabled = false;
+    return;
+  }
+  if (msg.type === 'error') {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+    addMsg('⚠️ ' + msg.message, 'bot');
+    sendBtn.disabled = false;
+    return;
+  }
+  if (msg.type === 'alert') {
+    // Unsolicited push from the background monitor — not a reply to
+    // anything the user typed, so it doesn't touch sendBtn/typing state.
+    addMsg(msg.message, 'alert');
+  }
+};
+
+function send(text) {
+  if (!text.trim() || ws.readyState !== WebSocket.OPEN) return;
+  addMsg(text, 'user');
+  sendBtn.disabled = true;
+  ws.send(JSON.stringify({ message: text, language: 'en' }));
+  input.value = '';
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  send(input.value);
+});
+
+document.querySelectorAll('.examples button').forEach(btn => {
+  btn.addEventListener('click', () => send(btn.dataset.q));
+});
+
+// --- Live India-wide dashboard (auto-refreshing via REST) -----------------
+// Works even without a WebSocket, and gives a second, redundant path to see
+// current conditions (the alert push above is the "automated" one).
+async function refreshLive() {
+  try {
+    const res = await fetch('/live/weather');
+    const data = await res.json();
+    if (!data.locations || data.locations.length === 0) {
+      liveGrid.textContent = 'No data yet — the monitor just started, check back shortly.';
+      return;
+    }
+    liveGrid.innerHTML = '';
+    for (const loc of data.locations) {
+      const card = document.createElement('div');
+      card.className = 'city-card' + (loc.severe ? ' severe' : '');
+      const cur = loc.current || {};
+      card.innerHTML = `
+        <div class="name">${loc.severe ? '⚠️ ' : ''}${loc.location}</div>
+        <div class="cond">${loc.today?.condition ?? '—'}</div>
+        <div class="temp">${cur.temperature_2m ?? '—'}°C</div>
+        <div class="cond">${loc.today?.precipitation_mm ?? 0} mm rain</div>
+      `;
+      liveGrid.appendChild(card);
+    }
+    liveUpdated.textContent = '· updated ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    liveGrid.textContent = 'Could not load live data.';
+  }
+}
+
+refreshLive();
+setInterval(refreshLive, 60000); // matches typical poll cadence server-side
+</script>
+</body>
+</html>
