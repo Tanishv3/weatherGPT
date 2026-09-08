@@ -2,115 +2,564 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WeatherGPT</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #0b0e14;
+    --panel: #151a24;
+    --panel-2: #1b2130;
+    --border: #262d3d;
+    --text: #e8ecf3;
+    --muted: #8b93a7;
+    --accent: #4f8cff;
+    --accent-soft: #24314f;
+    --warn: #ea580c;
+    --warn-soft: #3a1f10;
+  }
+  * { box-sizing: border-box; }
   body {
-    font-family: system-ui, -apple-system, sans-serif;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 16px;
-    background: #0f172a;
-    color: #e2e8f0;
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
   }
-  h1 { font-size: 1.25rem; margin-bottom: 4px; }
-  h2 { font-size: 0.95rem; margin: 20px 0 8px; color: #cbd5e1; }
-  #status { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; }
+  .app { max-width: 1180px; margin: 0 auto; padding: 18px 20px 40px; }
+
+  /* --- Top bar --- */
+  .topbar {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 18px; flex-wrap: wrap;
+  }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .icon-btn:hover { background: var(--panel-2); }
+  .place {
+    display: flex; align-items: center; gap: 6px; font-size: 0.9rem; color: var(--muted);
+    white-space: nowrap;
+  }
+  .place strong { color: var(--text); font-weight: 600; }
+  .search-wrap { flex: 1; min-width: 180px; }
+  .search-wrap form { display: flex; }
+  .search-wrap input {
+    width: 100%; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); font-size: 0.9rem;
+  }
+  .search-wrap input:focus { outline: none; border-color: var(--accent); }
+  .topbar-right { display: flex; gap: 8px; margin-left: auto; }
+
+  /* --- Tabs row --- */
+  .tabs-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+  }
+  .tabs { display: flex; gap: 18px; }
+  .tab-btn {
+    background: none; border: none; color: var(--muted); font-size: 0.85rem;
+    cursor: pointer; padding: 4px 0; border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--text); border-color: var(--accent); }
+  .pill-group { display: flex; background: var(--panel); border-radius: 999px; padding: 3px; gap: 2px; }
+  .pill-btn {
+    border: none; background: none; color: var(--muted); font-size: 0.8rem;
+    padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  }
+  .pill-btn.active { background: var(--accent); color: white; }
+
+  /* --- Layout grid --- */
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .panel h2 { font-size: 0.85rem; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .panel-head h2 { margin: 0; }
+  .link-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-size: 0.75rem; padding: 5px 12px; border-radius: 999px; cursor: pointer; text-decoration: none; }
+  .link-btn:hover { color: var(--text); }
+
+  /* --- Hero + day strip --- */
+  .hero-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .hero-card {
+    flex: 1 1 220px; background: var(--panel-2); border-radius: 12px; padding: 16px;
+    border: 1px solid var(--border);
+  }
+  .hero-card.severe { border-color: var(--warn); background: var(--warn-soft); }
+  .hero-date { font-size: 0.8rem; color: var(--muted); }
+  .hero-time { font-size: 0.75rem; color: var(--muted); margin-bottom: 8px; }
+  .hero-main { display: flex; align-items: center; gap: 10px; }
+  .hero-icon { font-size: 2.4rem; }
+  .hero-temp { font-size: 2.6rem; font-weight: 700; line-height: 1; }
+  .hero-cond { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+  .hero-details { margin-top: 10px; font-size: 0.75rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+
+  .strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .day-card {
+    flex: 0 0 84px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 8px; text-align: center;
+  }
+  .day-card.severe { border-color: var(--warn); background: var(--warn-soft); }
+  .day-card .dow { font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
+  .day-card .icon { font-size: 1.4rem; }
+  .day-card .hi { font-size: 0.9rem; font-weight: 600; margin-top: 4px; }
+  .day-card .lo { font-size: 0.75rem; color: var(--muted); }
+
+  /* --- Air quality panel --- */
+  .aqi-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .aqi-badge {
+    width: 84px; height: 84px; border-radius: 50%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-weight: 700; font-size: 1.3rem;
+    border: 3px solid var(--accent); flex: none;
+  }
+  .aqi-badge span { font-size: 0.65rem; font-weight: 400; color: var(--muted); }
+  .aqi-meta { font-size: 0.8rem; color: var(--muted); line-height: 1.7; }
+  .aqi-meta b { color: var(--text); }
+
+  /* --- Global map (decorative + outbound link) --- */
+  .map-area {
+    position: relative; height: 220px; border-radius: 12px; overflow: hidden;
+    background:
+      radial-gradient(circle at 20% 30%, #1e2a44 0, transparent 40%),
+      radial-gradient(circle at 70% 60%, #1e2a44 0, transparent 45%),
+      var(--panel-2);
+    border: 1px solid var(--border);
+  }
+  .map-dots {
+    position: absolute; inset: 0; opacity: 0.5;
+    background-image: radial-gradient(#3b4863 1px, transparent 1px);
+    background-size: 14px 14px;
+  }
+  .map-card {
+    position: absolute; left: 16px; bottom: 16px; max-width: 220px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-size: 0.75rem; color: var(--muted);
+  }
+  .map-card a.link-btn { display: inline-block; margin-top: 8px; color: var(--text); }
+
+  /* --- Chance of rain chart --- */
+  .rain-chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; margin-top: 6px; }
+  .rain-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+  .rain-bar { width: 60%; background: var(--accent); border-radius: 4px 4px 0 0; margin-top: auto; min-height: 3px; }
+  .rain-label { font-size: 0.65rem; color: var(--muted); margin-top: 6px; }
+
+  /* --- Other cities --- */
+  .city-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+  }
+  .city-row:last-child { border-bottom: none; }
+  .city-row .name { display: flex; align-items: center; gap: 8px; }
+  .city-row .cond { color: var(--muted); font-size: 0.75rem; }
+  .city-row.severe .name { color: var(--warn); }
+
+  /* --- Chat drawer --- */
+  .drawer-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; z-index: 40;
+  }
+  .drawer-overlay.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(380px, 92vw);
+    background: var(--panel); border-left: 1px solid var(--border); z-index: 50;
+    transform: translateX(100%); transition: transform 0.2s ease;
+    display: flex; flex-direction: column; padding: 16px;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .drawer-head h2 { margin: 0; font-size: 1rem; }
+  #ws-status { font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; }
   #log {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    height: 50vh;
-    overflow-y: auto;
-    padding: 12px;
-    background: #1e293b;
-    border-radius: 10px;
-    margin-bottom: 12px;
+    flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
+    padding: 10px; background: var(--panel-2); border-radius: 10px; margin-bottom: 10px;
   }
-  .msg { padding: 8px 12px; border-radius: 10px; max-width: 80%; white-space: pre-wrap; line-height: 1.4; }
-  .user { align-self: flex-end; background: #2563eb; color: white; }
-  .bot { align-self: flex-start; background: #334155; }
-  .typing { align-self: flex-start; color: #94a3b8; font-style: italic; font-size: 0.9rem; }
-  .alert { align-self: center; background: #7c2d12; color: #fed7aa; border: 1px solid #ea580c; font-size: 0.9rem; max-width: 95%; }
-  form { display: flex; gap: 8px; }
-  input[type=text] {
-    flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155;
-    background: #1e293b; color: #e2e8f0; font-size: 1rem;
+  .msg { padding: 8px 12px; border-radius: 10px; max-width: 85%; white-space: pre-wrap; line-height: 1.4; font-size: 0.85rem; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: white; }
+  .msg.bot { align-self: flex-start; background: var(--panel); }
+  .msg.typing { align-self: flex-start; color: var(--muted); font-style: italic; }
+  .msg.alert { align-self: center; background: var(--warn-soft); color: #fed7aa; border: 1px solid var(--warn); font-size: 0.8rem; max-width: 100%; }
+  #form { display: flex; gap: 6px; }
+  #input {
+    flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 0.85rem;
   }
-  button {
-    padding: 10px 16px; border-radius: 8px; border: none;
-    background: #2563eb; color: white; font-size: 1rem; cursor: pointer;
+  #send { padding: 9px 14px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; }
+  #send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .examples { font-size: 0.75rem; color: var(--muted); margin-top: 8px; }
+  .examples button { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-size: 0.7rem; padding: 4px 8px; margin: 2px 4px 0 0; border-radius: 6px; cursor: pointer; }
+
+  /* --- Alert toast --- */
+  #toast-stack { position: fixed; top: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
+  .toast {
+    background: var(--warn-soft); border: 1px solid var(--warn); color: #fed7aa;
+    padding: 10px 14px; border-radius: 10px; font-size: 0.8rem;
   }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .examples { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; }
-  .examples button {
-    background: #334155; font-size: 0.75rem; padding: 4px 8px; margin: 2px;
-  }
-  #live-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 8px;
-  }
-  .city-card {
-    background: #1e293b;
-    border-radius: 8px;
-    padding: 10px;
-    font-size: 0.8rem;
-    border: 1px solid #334155;
-  }
-  .city-card.severe { border-color: #ea580c; background: #431407; }
-  .city-card .name { font-weight: 600; margin-bottom: 4px; }
-  .city-card .cond { color: #94a3b8; }
-  .city-card .temp { font-size: 1.1rem; margin-top: 4px; }
-  #live-updated { font-size: 0.7rem; color: #64748b; margin-top: 6px; }
-  #here-card {
-    background: linear-gradient(135deg, #1e3a8a, #1e293b);
-    border: 1px solid #3b82f6;
-    border-radius: 10px;
-    padding: 14px 16px;
-    margin-bottom: 16px;
-  }
-  #here-card.severe { border-color: #ea580c; background: linear-gradient(135deg, #7c2d12, #1e293b); }
-  #here-card .here-name { font-size: 0.85rem; color: #93c5fd; margin-bottom: 4px; }
-  #here-card .here-temp { font-size: 2rem; font-weight: 600; }
-  #here-card .here-cond { color: #cbd5e1; margin: 2px 0 6px; }
-  #here-card .here-detail { font-size: 0.8rem; color: #94a3b8; }
-  #here-card button {
-    margin-top: 8px; padding: 6px 12px; font-size: 0.8rem;
-    background: #334155;
-  }
+
+  .muted-note { font-size: 0.75rem; color: var(--muted); text-align: center; padding: 20px 0; }
 </style>
 </head>
 <body>
-  <h1>🌦️ WeatherGPT</h1>
-  <div id="status">connecting…</div>
+<div class="app">
 
-  <h2>📍 Your Location</h2>
-  <div id="here-card">Requesting your location…</div>
+  <!-- Top bar -->
+  <div class="topbar">
+    <button class="icon-btn" id="chat-toggle" title="Ask WeatherGPT">💬</button>
+    <div class="place">📍 <strong id="place-name">Loading…</strong></div>
+    <div class="search-wrap">
+      <form id="search-form">
+        <input id="search-input" type="text" placeholder="Search city…" autocomplete="off" />
+      </form>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="theme-toggle" title="Toggle theme">🌙</button>
+    </div>
+  </div>
 
+  <!-- Tabs row -->
+  <div class="tabs-row">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="today">Today</button>
+      <button class="tab-btn" data-tab="tomorrow">Tomorrow</button>
+      <button class="tab-btn" data-tab="week">Next 7 days</button>
+    </div>
+    <div class="pill-group">
+      <button class="pill-btn active" data-pill="forecast">Forecast</button>
+      <button class="pill-btn" data-pill="air">Air quality</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Main column -->
+    <div>
+      <div class="panel" id="forecast-panel">
+        <div class="hero-row" id="hero-row"><div class="muted-note">Loading forecast…</div></div>
+        <div class="strip" id="day-strip"></div>
+      </div>
+
+      <div class="panel" id="air-panel" style="display:none; margin-top:18px;">
+        <h2>Air quality</h2>
+        <div class="aqi-wrap" id="aqi-wrap"><div class="muted-note">Loading…</div></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <div class="panel-head">
+          <h2>Global map</h2>
+          <a class="link-btn" href="https://www.windy.com" target="_blank" rel="noopener">View wide</a>
+        </div>
+        <div class="map-area">
+          <div class="map-dots"></div>
+          <div class="map-card">
+            Explore a global map of wind, weather and ocean conditions.
+            <br />
+            <a class="link-btn" href="https://www.windy.com" target="_blank" rel="noopener">Explore map →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar column -->
+    <div>
+      <div class="panel">
+        <h2>Chance of rain</h2>
+        <div class="rain-chart" id="rain-chart"><div class="muted-note">Loading…</div></div>
+      </div>
+
+      <div class="panel" style="margin-top:18px;">
+        <h2>Other cities</h2>
+        <div id="other-cities"><div class="muted-note">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Alert toasts -->
+<div id="toast-stack"></div>
+
+<!-- Chat drawer -->
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h2>🌦️ Ask WeatherGPT</h2>
+    <button class="icon-btn" id="drawer-close">✕</button>
+  </div>
+  <div id="ws-status">connecting…</div>
   <div id="log"></div>
   <form id="form">
     <input id="input" type="text" placeholder="Ask about weather anywhere…" autocomplete="off" />
     <button id="send" type="submit">Send</button>
   </form>
   <div class="examples">
-    Try:
     <button type="button" data-q="will it rain in Pune tomorrow?">rain in Pune tomorrow?</button>
     <button type="button" data-q="any cyclone alert for Chennai">cyclone alert Chennai</button>
     <button type="button" data-q="crop advisory for Nashik">crop advisory Nashik</button>
   </div>
-
-  <h2>📡 Live across India <span id="live-updated"></span></h2>
-  <div id="live-grid">Loading…</div>
+</div>
 
 <script>
+// =====================================================================
+// State
+// =====================================================================
+let currentDashboard = null; // last successful /dashboard/weather response
+let activeTab = 'today';     // today | tomorrow | week
+let activePill = 'forecast'; // forecast | air
+
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// =====================================================================
+// Dashboard loading
+// =====================================================================
+const placeNameEl = document.getElementById('place-name');
+const heroRow = document.getElementById('hero-row');
+const dayStrip = document.getElementById('day-strip');
+const aqiWrap = document.getElementById('aqi-wrap');
+const rainChart = document.getElementById('rain-chart');
+const otherCitiesEl = document.getElementById('other-cities');
+
+async function loadDashboard(query) {
+  const params = new URLSearchParams(query);
+  try {
+    const res = await fetch(`/dashboard/weather?${params.toString()}`);
+    if (!res.ok) throw new Error('request failed');
+    const data = await res.json();
+    currentDashboard = data;
+    placeNameEl.textContent = data.resolved_name;
+    renderForecast();
+    renderAirQuality();
+    renderRainChart();
+    loadOtherCities(data.resolved_name.split(',')[0]);
+  } catch (e) {
+    placeNameEl.textContent = 'Unavailable';
+    heroRow.innerHTML = '<div class="muted-note">Could not load weather for this location.</div>';
+    dayStrip.innerHTML = '';
+  }
+}
+
+function dowLabel(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return DOW[d.getDay()];
+}
+
+function renderForecast() {
+  if (!currentDashboard) return;
+  const { current, days, severe } = currentDashboard;
+  heroRow.innerHTML = '';
+  dayStrip.innerHTML = '';
+
+  if (activeTab === 'week') {
+    // No single hero — show all 7 days as the strip, slightly larger context.
+    days.forEach(d => dayStrip.appendChild(buildDayCard(d)));
+    return;
+  }
+
+  const heroIndex = activeTab === 'tomorrow' ? 1 : 0;
+  const heroDay = days[heroIndex];
+  const hero = document.createElement('div');
+  hero.className = 'hero-card' + (activeTab === 'today' && severe ? ' severe' : '');
+
+  if (activeTab === 'today') {
+    const now = new Date();
+    hero.innerHTML = `
+      <div class="hero-date">${DOW[now.getDay()]}</div>
+      <div class="hero-time">${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+      <div class="hero-main">
+        <div class="hero-icon">${current.icon}</div>
+        <div>
+          <div class="hero-temp">${current.temperature ?? '—'}°</div>
+          <div class="hero-cond">${current.condition ?? ''}</div>
+        </div>
+      </div>
+      <div class="hero-details">
+        <span>Humidity: ${current.humidity ?? '—'}%</span>
+        <span>Wind: ${current.wind_kmh ?? '—'} km/h</span>
+        <span>Pressure: ${current.pressure_hpa ?? '—'} hPa</span>
+      </div>
+    `;
+  } else {
+    hero.innerHTML = `
+      <div class="hero-date">${dowLabel(heroDay.date)}</div>
+      <div class="hero-time">${heroDay.date}</div>
+      <div class="hero-main">
+        <div class="hero-icon">${heroDay.icon}</div>
+        <div>
+          <div class="hero-temp">${heroDay.temp_max}°</div>
+          <div class="hero-cond">${heroDay.condition}</div>
+        </div>
+      </div>
+      <div class="hero-details">
+        <span>Low: ${heroDay.temp_min}°</span>
+        <span>Rain chance: ${heroDay.rain_chance_pct ?? '—'}%</span>
+        <span>${heroDay.precipitation_mm} mm</span>
+      </div>
+    `;
+  }
+  heroRow.appendChild(hero);
+
+  const stripDays = activeTab === 'today' ? days.slice(1) : days.slice(2);
+  stripDays.forEach(d => dayStrip.appendChild(buildDayCard(d)));
+}
+
+function buildDayCard(d) {
+  const card = document.createElement('div');
+  card.className = 'day-card' + (d.rain_chance_pct >= 70 || d.precipitation_mm > 50 ? ' severe' : '');
+  card.innerHTML = `
+    <div class="dow">${dowLabel(d.date)}</div>
+    <div class="icon">${d.icon}</div>
+    <div class="hi">${d.temp_max}°</div>
+    <div class="lo">${d.temp_min}°</div>
+  `;
+  return card;
+}
+
+function aqiCategory(aqi) {
+  if (aqi <= 50) return { label: 'Good', color: '#22c55e' };
+  if (aqi <= 100) return { label: 'Moderate', color: '#eab308' };
+  if (aqi <= 150) return { label: 'Unhealthy (SG)', color: '#f97316' };
+  if (aqi <= 200) return { label: 'Unhealthy', color: '#ef4444' };
+  if (aqi <= 300) return { label: 'Very Unhealthy', color: '#a855f7' };
+  return { label: 'Hazardous', color: '#7f1d1d' };
+}
+
+function renderAirQuality() {
+  if (!currentDashboard) return;
+  const aqi = currentDashboard.aqi;
+  if (!aqi || aqi.us_aqi == null) {
+    aqiWrap.innerHTML = '<div class="muted-note">Air quality data is unavailable for this location right now.</div>';
+    return;
+  }
+  const cat = aqiCategory(aqi.us_aqi);
+  aqiWrap.innerHTML = `
+    <div class="aqi-badge" style="border-color:${cat.color}">
+      ${aqi.us_aqi}<span>US AQI</span>
+    </div>
+    <div class="aqi-meta">
+      <div><b>${cat.label}</b></div>
+      <div>PM2.5: ${aqi.pm2_5 ?? '—'} µg/m³</div>
+      <div>PM10: ${aqi.pm10 ?? '—'} µg/m³</div>
+    </div>
+  `;
+}
+
+function renderRainChart() {
+  if (!currentDashboard) return;
+  const days = currentDashboard.days.slice(0, 7);
+  rainChart.innerHTML = '';
+  days.forEach(d => {
+    const pct = d.rain_chance_pct ?? Math.min(100, (d.precipitation_mm || 0) * 4);
+    const wrap = document.createElement('div');
+    wrap.className = 'rain-bar-wrap';
+    wrap.innerHTML = `
+      <div class="rain-bar" style="height:${Math.max(pct, 3)}%"></div>
+      <div class="rain-label">${dowLabel(d.date)}</div>
+    `;
+    rainChart.appendChild(wrap);
+  });
+}
+
+async function loadOtherCities(exclude) {
+  try {
+    const res = await fetch(`/dashboard/other-cities?exclude=${encodeURIComponent(exclude || '')}`);
+    const data = await res.json();
+    if (!data.cities || data.cities.length === 0) {
+      otherCitiesEl.innerHTML = '<div class="muted-note">No data yet.</div>';
+      return;
+    }
+    otherCitiesEl.innerHTML = '';
+    data.cities.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'city-row' + (c.severe ? ' severe' : '');
+      row.innerHTML = `
+        <div class="name">${c.severe ? '⚠️ ' : ''}${c.name}</div>
+        <div>
+          <span>${c.temperature ?? '—'}°</span>
+          <div class="cond">${c.condition ?? ''}</div>
+        </div>
+      `;
+      otherCitiesEl.appendChild(row);
+    });
+  } catch (e) {
+    otherCitiesEl.innerHTML = '<div class="muted-note">Could not load.</div>';
+  }
+}
+
+// --- Tabs / pills ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.tab;
+    renderForecast();
+  });
+});
+document.querySelectorAll('.pill-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activePill = btn.dataset.pill;
+    document.getElementById('forecast-panel').style.display = activePill === 'forecast' ? '' : 'none';
+    document.getElementById('air-panel').style.display = activePill === 'air' ? '' : 'none';
+  });
+});
+
+// --- Search ---
+document.getElementById('search-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const val = document.getElementById('search-input').value.trim();
+  if (!val) return;
+  loadDashboard({ city: val });
+});
+
+// --- Theme toggle (light/dark) ---
+const themeBtn = document.getElementById('theme-toggle');
+let isLight = false;
+themeBtn.addEventListener('click', () => {
+  isLight = !isLight;
+  document.documentElement.style.setProperty('--bg', isLight ? '#f4f6fb' : '#0b0e14');
+  document.documentElement.style.setProperty('--panel', isLight ? '#ffffff' : '#151a24');
+  document.documentElement.style.setProperty('--panel-2', isLight ? '#eef1f8' : '#1b2130');
+  document.documentElement.style.setProperty('--border', isLight ? '#dde3f0' : '#262d3d');
+  document.documentElement.style.setProperty('--text', isLight ? '#161a23' : '#e8ecf3');
+  document.documentElement.style.setProperty('--muted', isLight ? '#5b6478' : '#8b93a7');
+  themeBtn.textContent = isLight ? '☀️' : '🌙';
+});
+
+// --- Initial load: try browser geolocation, fall back to a default city ---
+function initDashboard() {
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => loadDashboard({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => loadDashboard({ city: 'New Delhi' }),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+    );
+  } else {
+    loadDashboard({ city: 'New Delhi' });
+  }
+}
+initDashboard();
+setInterval(() => {
+  if (currentDashboard) loadDashboard({ city: currentDashboard.resolved_name.split(',')[0] });
+}, 10 * 60 * 1000);
+
+// =====================================================================
+// Chat drawer (WebSocket) — same functionality as before, tucked away
+// =====================================================================
+const drawer = document.getElementById('drawer');
+const drawerOverlay = document.getElementById('drawer-overlay');
+document.getElementById('chat-toggle').addEventListener('click', () => {
+  drawer.classList.add('open');
+  drawerOverlay.classList.add('open');
+});
+document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+drawerOverlay.addEventListener('click', closeDrawer);
+function closeDrawer() {
+  drawer.classList.remove('open');
+  drawerOverlay.classList.remove('open');
+}
+
 const log = document.getElementById('log');
-const statusEl = document.getElementById('status');
+const wsStatus = document.getElementById('ws-status');
 const form = document.getElementById('form');
 const input = document.getElementById('input');
 const sendBtn = document.getElementById('send');
-const liveGrid = document.getElementById('live-grid');
-const liveUpdated = document.getElementById('live-updated');
 
 function addMsg(text, cls) {
   const div = document.createElement('div');
@@ -121,14 +570,22 @@ function addMsg(text, cls) {
   return div;
 }
 
+function showToast(message) {
+  const stack = document.getElementById('toast-stack');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  stack.appendChild(toast);
+  setTimeout(() => toast.remove(), 12000);
+}
+
 const proto = location.protocol === 'https:' ? 'wss' : 'ws';
 const ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
-
 let typingEl = null;
 
-ws.onopen = () => { statusEl.textContent = 'connected'; };
-ws.onclose = () => { statusEl.textContent = 'disconnected — refresh to reconnect'; sendBtn.disabled = true; };
-ws.onerror = () => { statusEl.textContent = 'connection error'; };
+ws.onopen = () => { wsStatus.textContent = 'connected'; };
+ws.onclose = () => { wsStatus.textContent = 'disconnected — refresh to reconnect'; sendBtn.disabled = true; };
+ws.onerror = () => { wsStatus.textContent = 'connection error'; };
 
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
@@ -149,9 +606,10 @@ ws.onmessage = (event) => {
     return;
   }
   if (msg.type === 'alert') {
-    // Unsolicited push from the background monitor — not a reply to
-    // anything the user typed, so it doesn't touch sendBtn/typing state.
+    // Unsolicited push from the background monitor. Show it in the chat
+    // log AND as a toast, since the drawer may not be open when it arrives.
     addMsg(msg.message, 'alert');
+    showToast(msg.message);
   }
 };
 
@@ -169,108 +627,12 @@ form.addEventListener('submit', (e) => {
 });
 
 document.querySelectorAll('.examples button').forEach(btn => {
-  btn.addEventListener('click', () => send(btn.dataset.q));
+  btn.addEventListener('click', () => {
+    drawer.classList.add('open');
+    drawerOverlay.classList.add('open');
+    send(btn.dataset.q);
+  });
 });
-
-// --- Live India-wide dashboard (auto-refreshing via REST) -----------------
-// Works even without a WebSocket, and gives a second, redundant path to see
-// current conditions (the alert push above is the "automated" one).
-async function refreshLive() {
-  try {
-    const res = await fetch('/live/weather');
-    const data = await res.json();
-    if (!data.locations || data.locations.length === 0) {
-      liveGrid.textContent = 'No data yet — the monitor just started, check back shortly.';
-      return;
-    }
-    liveGrid.innerHTML = '';
-    for (const loc of data.locations) {
-      const card = document.createElement('div');
-      card.className = 'city-card' + (loc.severe ? ' severe' : '');
-      const cur = loc.current || {};
-      card.innerHTML = `
-        <div class="name">${loc.severe ? '⚠️ ' : ''}${loc.location}</div>
-        <div class="cond">${loc.today?.condition ?? '—'}</div>
-        <div class="temp">${cur.temperature_2m ?? '—'}°C</div>
-        <div class="cond">${loc.today?.precipitation_mm ?? 0} mm rain</div>
-      `;
-      liveGrid.appendChild(card);
-    }
-    liveUpdated.textContent = '· updated ' + new Date().toLocaleTimeString();
-  } catch (e) {
-    liveGrid.textContent = 'Could not load live data.';
-  }
-}
-
-refreshLive();
-setInterval(refreshLive, 60000); // matches typical poll cadence server-side
-
-// --- Your Location (browser Geolocation API) -------------------------------
-// Note: browsers only allow navigator.geolocation on HTTPS or on
-// localhost/127.0.0.1 — both dev setups are fine, a plain-HTTP deployment
-// elsewhere would need to be served over HTTPS for this to work.
-const hereCard = document.getElementById('here-card');
-
-function renderHereError(message) {
-  hereCard.classList.remove('severe');
-  hereCard.innerHTML = `
-    <div class="here-detail">${message}</div>
-    <button type="button" id="retry-here">Try again</button>
-  `;
-  document.getElementById('retry-here')?.addEventListener('click', requestHereLocation);
-}
-
-async function loadHereWeather(lat, lon) {
-  try {
-    const res = await fetch(`/weather/here?lat=${lat}&lon=${lon}`);
-    if (!res.ok) throw new Error('request failed');
-    const data = await res.json();
-    hereCard.classList.toggle('severe', !!data.severe);
-    hereCard.innerHTML = `
-      <div class="here-name">${data.severe ? '⚠️ ' : ''}${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>
-      <div class="here-temp">${data.current?.temperature_2m ?? '—'}°C</div>
-      <div class="here-cond">${data.condition ?? '—'}</div>
-      <div class="here-detail">
-        Humidity ${data.current?.relative_humidity_2m ?? '—'}% ·
-        Wind ${data.current?.wind_speed_10m ?? '—'} km/h ·
-        ${data.today?.precipitation_mm ?? 0} mm rain today
-      </div>
-    `;
-  } catch (e) {
-    renderHereError('Could not load weather for your location.');
-  }
-}
-
-function requestHereLocation() {
-  if (!('geolocation' in navigator)) {
-    renderHereError('Geolocation is not supported by this browser.');
-    return;
-  }
-  hereCard.classList.remove('severe');
-  hereCard.textContent = 'Requesting your location…';
-  navigator.geolocation.getCurrentPosition(
-    (pos) => loadHereWeather(pos.coords.latitude, pos.coords.longitude),
-    (err) => {
-      const denied = err.code === err.PERMISSION_DENIED;
-      renderHereError(denied
-        ? 'Location access denied — allow it in your browser to see local weather.'
-        : 'Could not determine your location.');
-    },
-    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
-  );
-}
-
-requestHereLocation();
-// Silent background refresh — keep the last good reading on screen if a
-// later attempt fails, rather than replacing it with an error.
-setInterval(() => {
-  if (!('geolocation' in navigator)) return;
-  navigator.geolocation.getCurrentPosition(
-    (pos) => loadHereWeather(pos.coords.latitude, pos.coords.longitude),
-    () => {},
-    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
-  );
-}, 10 * 60 * 1000);
 </script>
 </body>
 </html>

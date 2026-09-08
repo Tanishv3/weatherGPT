@@ -140,8 +140,8 @@ async def fetch_forecast(latitude: float, longitude: float, days: int = 3) -> di
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code",
-        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code,wind_speed_10m_max",
+        "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code,surface_pressure",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,wind_speed_10m_max",
         "forecast_days": days,
         "timezone": "auto",
     }
@@ -211,6 +211,38 @@ async def fetch_forecasts_batch(locations: list[tuple[str, float, float]], days:
     raise WeatherServiceError(f"Batch weather API request failed after retries: {last_exc}") from last_exc
 
 
+async def fetch_air_quality(latitude: float, longitude: float) -> dict | None:
+    """Current AQI/PM levels via Open-Meteo's separate air-quality API.
+
+    Best-effort: returns None on any failure rather than raising, since air
+    quality is a nice-to-have panel in the dashboard and must never block
+    the core weather view if this particular upstream is unavailable.
+    """
+    cache_key = f"aqi:{round(latitude, 2)}:{round(longitude, 2)}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        resp = await _get_client().get(
+            settings.air_quality_api_base,
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "current": "us_aqi,pm2_5,pm10",
+                "timezone": "auto",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json().get("current")
+        if not data:
+            return None
+        _cache_set(cache_key, data, _FORECAST_TTL)
+        return data
+    except (httpx.HTTPError, ValueError):
+        return None
+
+
 # WMO weather codes -> short human description
 _WEATHER_CODE_MAP = {
     0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast",
@@ -225,6 +257,23 @@ _WEATHER_CODE_MAP = {
 
 def describe_weather_code(code: int) -> str:
     return _WEATHER_CODE_MAP.get(code, "unknown conditions")
+
+
+# WMO weather codes -> a single representative emoji, for compact UI display
+# (day-strip icons, hero card, etc.) without duplicating this table client-side.
+_WEATHER_CODE_ICON = {
+    0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+    45: "🌫️", 48: "🌫️",
+    51: "🌦️", 53: "🌦️", 55: "🌧️",
+    61: "🌧️", 63: "🌧️", 65: "🌧️",
+    71: "🌨️", 73: "🌨️", 75: "❄️",
+    80: "🌦️", 81: "🌧️", 82: "⛈️",
+    95: "⛈️", 96: "⛈️", 99: "⛈️",
+}
+
+
+def weather_icon(code: int) -> str:
+    return _WEATHER_CODE_ICON.get(code, "🌡️")
 
 
 def is_severe(daily: dict, day_index: int = 0) -> bool:

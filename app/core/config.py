@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # swap for IMD/GFS-WRF outputs in production.
     weather_api_base: str = "https://api.open-meteo.com/v1/forecast"
     geocoding_api_base: str = "https://geocoding-api.open-meteo.com/v1/search"
+    air_quality_api_base: str = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
     # --- Alerts ---
     alert_poll_interval_seconds: int = 600
