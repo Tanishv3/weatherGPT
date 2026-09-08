@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
-from app.api.routes import chat, health, alerts, ws_chat, live, location
+from app.api.routes import chat, health, alerts, ws_chat, live, location, here
 from app.services import weather_service, llm_client, live_monitor
 
 
@@ -44,6 +44,7 @@ app.include_router(alerts.router, tags=["alerts"])
 app.include_router(ws_chat.router, tags=["chat-ws"])
 app.include_router(live.router, tags=["live"])
 app.include_router(location.router, tags=["location"])
+app.include_router(here.router, tags=["here"])
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

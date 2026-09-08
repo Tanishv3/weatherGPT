@@ -63,11 +63,31 @@
   .city-card .cond { color: #94a3b8; }
   .city-card .temp { font-size: 1.1rem; margin-top: 4px; }
   #live-updated { font-size: 0.7rem; color: #64748b; margin-top: 6px; }
+  #here-card {
+    background: linear-gradient(135deg, #1e3a8a, #1e293b);
+    border: 1px solid #3b82f6;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  #here-card.severe { border-color: #ea580c; background: linear-gradient(135deg, #7c2d12, #1e293b); }
+  #here-card .here-name { font-size: 0.85rem; color: #93c5fd; margin-bottom: 4px; }
+  #here-card .here-temp { font-size: 2rem; font-weight: 600; }
+  #here-card .here-cond { color: #cbd5e1; margin: 2px 0 6px; }
+  #here-card .here-detail { font-size: 0.8rem; color: #94a3b8; }
+  #here-card button {
+    margin-top: 8px; padding: 6px 12px; font-size: 0.8rem;
+    background: #334155;
+  }
 </style>
 </head>
 <body>
   <h1>🌦️ WeatherGPT</h1>
   <div id="status">connecting…</div>
+
+  <h2>📍 Your Location</h2>
+  <div id="here-card">Requesting your location…</div>
+
   <div id="log"></div>
   <form id="form">
     <input id="input" type="text" placeholder="Ask about weather anywhere…" autocomplete="off" />
@@ -184,6 +204,73 @@ async function refreshLive() {
 
 refreshLive();
 setInterval(refreshLive, 60000); // matches typical poll cadence server-side
+
+// --- Your Location (browser Geolocation API) -------------------------------
+// Note: browsers only allow navigator.geolocation on HTTPS or on
+// localhost/127.0.0.1 — both dev setups are fine, a plain-HTTP deployment
+// elsewhere would need to be served over HTTPS for this to work.
+const hereCard = document.getElementById('here-card');
+
+function renderHereError(message) {
+  hereCard.classList.remove('severe');
+  hereCard.innerHTML = `
+    <div class="here-detail">${message}</div>
+    <button type="button" id="retry-here">Try again</button>
+  `;
+  document.getElementById('retry-here')?.addEventListener('click', requestHereLocation);
+}
+
+async function loadHereWeather(lat, lon) {
+  try {
+    const res = await fetch(`/weather/here?lat=${lat}&lon=${lon}`);
+    if (!res.ok) throw new Error('request failed');
+    const data = await res.json();
+    hereCard.classList.toggle('severe', !!data.severe);
+    hereCard.innerHTML = `
+      <div class="here-name">${data.severe ? '⚠️ ' : ''}${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>
+      <div class="here-temp">${data.current?.temperature_2m ?? '—'}°C</div>
+      <div class="here-cond">${data.condition ?? '—'}</div>
+      <div class="here-detail">
+        Humidity ${data.current?.relative_humidity_2m ?? '—'}% ·
+        Wind ${data.current?.wind_speed_10m ?? '—'} km/h ·
+        ${data.today?.precipitation_mm ?? 0} mm rain today
+      </div>
+    `;
+  } catch (e) {
+    renderHereError('Could not load weather for your location.');
+  }
+}
+
+function requestHereLocation() {
+  if (!('geolocation' in navigator)) {
+    renderHereError('Geolocation is not supported by this browser.');
+    return;
+  }
+  hereCard.classList.remove('severe');
+  hereCard.textContent = 'Requesting your location…';
+  navigator.geolocation.getCurrentPosition(
+    (pos) => loadHereWeather(pos.coords.latitude, pos.coords.longitude),
+    (err) => {
+      const denied = err.code === err.PERMISSION_DENIED;
+      renderHereError(denied
+        ? 'Location access denied — allow it in your browser to see local weather.'
+        : 'Could not determine your location.');
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+  );
+}
+
+requestHereLocation();
+// Silent background refresh — keep the last good reading on screen if a
+// later attempt fails, rather than replacing it with an error.
+setInterval(() => {
+  if (!('geolocation' in navigator)) return;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => loadHereWeather(pos.coords.latitude, pos.coords.longitude),
+    () => {},
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+  );
+}, 10 * 60 * 1000);
 </script>
 </body>
 </html>

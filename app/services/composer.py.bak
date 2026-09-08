@@ -57,18 +57,11 @@ def _rule_based_reply(parsed: ParsedQuery, location_name: str, forecast: dict) -
 
     # CURRENT_WEATHER / HISTORICAL / fallback
     if current:
-        precipitation = current.get("precipitation")
-        precipitation_text = (
-            f"precipitation {precipitation} mm"
-            if precipitation is not None
-            else "precipitation data unavailable"
-        )
         reply = (
             f"Right now in {location_name}: {describe_weather_code(current.get('weather_code', -1))}, "
             f"{current.get('temperature_2m')}°C, "
             f"humidity {current.get('relative_humidity_2m')}%, "
-            f"wind {current.get('wind_speed_10m')} km/h, "
-            f"{precipitation_text}."
+            f"wind {current.get('wind_speed_10m')} km/h."
         )
     else:
         reply = f"I couldn't retrieve current conditions for {location_name} right now."
@@ -101,16 +94,7 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
             max_tokens=250,
         )
         text = resp.choices[0].message.content
-        if not text:
-            return None
-
-        # The LLM is only a language formatter. Never allow it to replace
-        # the API-resolved location or factual weather values. If it appears
-        # to change the location, use the deterministic API-backed reply.
-        if location_name.lower() not in text.lower():
-            return None
-
-        return text.strip()
+        return text.strip() if text else None
     except Exception:
         # Network error, rate limit, auth failure, etc. — degrade gracefully.
         return None
@@ -118,6 +102,5 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
 
 async def compose_reply(parsed: ParsedQuery, location_name: str, forecast: dict) -> tuple[str, dict]:
     rule_reply, data = _rule_based_reply(parsed, location_name, forecast)
-    # Keep the API-backed deterministic reply as the final source of truth.
-    # The LLM must never be able to replace Indian locations or live values.
-    return rule_reply, data
+    llm_reply = await _llm_reply(parsed, location_name, data)
+    return (llm_reply or rule_reply), data

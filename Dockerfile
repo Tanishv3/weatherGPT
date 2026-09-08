@@ -1,7 +1,5 @@
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.title="WeatherGPT" org.opencontainers.image.version="2.1-india-first-dynamic"
-
 WORKDIR /app
 
 COPY requirements.txt .

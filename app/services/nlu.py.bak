@@ -14,57 +14,6 @@ from app.models.schemas import Intent, ParsedQuery
 from app.core.config import settings
 from app.services import llm_client
 
-# Indian states/UTs and common cities. State names map to their capital so
-# queries such as "weather in Goa" or "rain in Maharashtra" always resolve
-# inside India instead of being interpreted as similarly named foreign places.
-INDIA_LOCATION_ALIASES = {
-    "andhra pradesh": "Amaravati", "arunachal pradesh": "Itanagar",
-    "assam": "Guwahati", "bihar": "Patna", "chhattisgarh": "Raipur",
-    "goa": "Panaji", "gujarat": "Gandhinagar", "haryana": "Chandigarh",
-    "himachal pradesh": "Shimla", "jharkhand": "Ranchi", "karnataka": "Bengaluru",
-    "kerala": "Thiruvananthapuram", "madhya pradesh": "Bhopal",
-    "maharashtra": "Mumbai", "manipur": "Imphal", "meghalaya": "Shillong",
-    "mizoram": "Aizawl", "nagaland": "Kohima", "odisha": "Bhubaneswar",
-    "orissa": "Bhubaneswar", "punjab": "Chandigarh", "rajasthan": "Jaipur",
-    "sikkim": "Gangtok", "tamil nadu": "Chennai", "telangana": "Hyderabad",
-    "tripura": "Agartala", "uttar pradesh": "Lucknow", "uttarakhand": "Dehradun",
-    "west bengal": "Kolkata",
-    "andaman and nicobar islands": "Port Blair", "andaman": "Port Blair",
-    "chandigarh": "Chandigarh", "dadra and nagar haveli and daman and diu": "Daman",
-    "daman and diu": "Daman", "delhi": "New Delhi", "new delhi": "New Delhi",
-    "jammu and kashmir": "Srinagar", "ladakh": "Leh",
-    "lakshadweep": "Kavaratti", "puducherry": "Puducherry",
-    "pondicherry": "Puducherry",
-    "mumbai": "Mumbai", "bombay": "Mumbai", "pune": "Pune", "nagpur": "Nagpur",
-    "nashik": "Nashik", "nashik city": "Nashik", "thane": "Thane",
-    "aurangabad": "Chhatrapati Sambhajinagar", "chhatrapati sambhajinagar": "Chhatrapati Sambhajinagar",
-    "kolhapur": "Kolhapur", "goa city": "Panaji", "panaji": "Panaji",
-    "vasco da gama": "Vasco da Gama", "ahmedabad": "Ahmedabad", "surat": "Surat",
-    "vadodara": "Vadodara", "rajkot": "Rajkot", "gandhinagar": "Gandhinagar",
-    "jaipur": "Jaipur", "jodhpur": "Jodhpur", "udaipur": "Udaipur",
-    "kota": "Kota", "delhi ncr": "New Delhi", "noida": "Noida",
-    "gurgaon": "Gurugram", "gurugram": "Gurugram", "lucknow": "Lucknow",
-    "kanpur": "Kanpur", "agra": "Agra", "varanasi": "Varanasi", "prayagraj": "Prayagraj",
-    "meerut": "Meerut", "chandigarh": "Chandigarh", "amritsar": "Amritsar",
-    "ludhiana": "Ludhiana", "jalandhar": "Jalandhar", "shimla": "Shimla",
-    "dehradun": "Dehradun", "haridwar": "Haridwar", "srinagar": "Srinagar",
-    "jammu": "Jammu", "leh": "Leh", "bhopal": "Bhopal", "indore": "Indore",
-    "gwalior": "Gwalior", "jabalpur": "Jabalpur", "raipur": "Raipur",
-    "bilaspur": "Bilaspur", "ranchi": "Ranchi", "jamshedpur": "Jamshedpur",
-    "patna": "Patna", "gaya": "Gaya", "kolkata": "Kolkata", "howrah": "Howrah",
-    "siliguri": "Siliguri", "bhubaneswar": "Bhubaneswar", "cuttack": "Cuttack",
-    "guwahati": "Guwahati", "dibrugarh": "Dibrugarh", "itanagar": "Itanagar",
-    "gangtok": "Gangtok", "shillong": "Shillong", "imphal": "Imphal", "aizawl": "Aizawl",
-    "kohima": "Kohima", "hyderabad": "Hyderabad", "warangal": "Warangal",
-    "bengaluru": "Bengaluru", "bangalore": "Bengaluru", "mysuru": "Mysuru",
-    "mangalore": "Mangaluru", "mangaluru": "Mangaluru", "chennai": "Chennai",
-    "coimbatore": "Coimbatore", "madurai": "Madurai", "kochi": "Kochi",
-    "ernakulam": "Kochi", "thiruvananthapuram": "Thiruvananthapuram", "trivandrum": "Thiruvananthapuram",
-    "kozhikode": "Kozhikode", "vijayawada": "Vijayawada", "visakhapatnam": "Visakhapatnam",
-    "vizag": "Visakhapatnam", "amaravati": "Amaravati", "tirupati": "Tirupati",
-    "agra": "Agra", "port blair": "Port Blair", "puducherry": "Puducherry",
-}
-
 _FORECAST_WORDS = ("forecast", "tomorrow", "next", "week", "will it rain", "rain kal")
 _ALERT_WORDS = ("alert", "warning", "cyclone", "flood", "storm", "danger")
 _ADVISORY_WORDS = ("advisory", "crop", "sow", "irrigat", "harvest", "farmer")
@@ -96,18 +45,6 @@ def _strip_trailing_stopwords(location_text: str) -> str:
     return " ".join(words)
 
 
-def _normalize_indian_location(location_text: str | None) -> str | None:
-    if not location_text:
-        return None
-    clean = re.sub(r"\s+", " ", location_text.strip().strip("?.,! "))
-    key = clean.lower()
-    if key in INDIA_LOCATION_ALIASES:
-        return INDIA_LOCATION_ALIASES[key]
-    # Also handle phrases like "Pune, Maharashtra" by checking the city first.
-    first = key.split(",")[0].strip()
-    return INDIA_LOCATION_ALIASES.get(first, clean)
-
-
 def _rule_based_parse(text: str, language: str) -> ParsedQuery:
     lowered = text.lower()
 
@@ -126,7 +63,7 @@ def _rule_based_parse(text: str, language: str) -> ParsedQuery:
     location_text = None
     if location_match:
         stripped = _strip_trailing_stopwords(location_match.group(1))
-        location_text = _normalize_indian_location(stripped or None)
+        location_text = stripped or None
 
     date_from = date.today()
     date_to = date_from + timedelta(days=3) if intent == Intent.FORECAST else date_from
@@ -187,15 +124,9 @@ async def _llm_parse(text: str, language: str) -> ParsedQuery | None:
         span = max(days_ahead, 3) if intent == Intent.FORECAST else days_ahead
         date_to = date_from + timedelta(days=span)
 
-        # Never let the LLM invent/correct the user's location.
-        # Extract the place directly from the original user message so
-        # "rain in Goa" cannot become "Genoa" due to an LLM interpretation.
-        rule_parsed = _rule_based_parse(text, language)
-        location_text = rule_parsed.location_text or _normalize_indian_location(parsed_json.get("location_text")) or None
-
         return ParsedQuery(
             intent=intent,
-            location_text=location_text,
+            location_text=parsed_json.get("location_text") or None,
             date_from=date_from,
             date_to=date_to,
             language=language,

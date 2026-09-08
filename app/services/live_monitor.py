@@ -56,14 +56,18 @@ def get_snapshot() -> dict[str, dict]:
 
 
 async def _poll_once() -> None:
+    # Fetch all Indian monitored cities in a single API request.
+    # This is much more reliable than making 14 separate requests at startup.
+    try:
+        forecasts = await weather_service.fetch_forecasts_batch(MONITORED_LOCATIONS)
+    except WeatherServiceError as e:
+        logger.warning("live monitor: batch weather fetch failed: %s", e)
+        return
+
     for name, lat, lon in MONITORED_LOCATIONS:
-        try:
-            forecast = await weather_service.fetch_forecast(lat, lon)
-        except WeatherServiceError as e:
-            logger.warning("live monitor: failed to fetch %s: %s", name, e)
-            continue
-        except Exception as e:
-            logger.warning("live monitor: unexpected error for %s: %s", name, e)
+        forecast = forecasts.get(name)
+        if not forecast:
+            logger.warning("live monitor: no forecast returned for %s", name)
             continue
 
         current = forecast.get("current", {})

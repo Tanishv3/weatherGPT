@@ -27,10 +27,7 @@ async def chat(req: ChatRequest) -> ChatResponse:
         else:
             location_name = parsed.location_text or "your location"
 
-        forecast_days = 7
-        if parsed.intent.value == "forecast" and parsed.date_from and parsed.date_to:
-            forecast_days = max(1, min((parsed.date_to - parsed.date_from).days + 1, 16))
-        forecast = await fetch_forecast(lat, lon, days=forecast_days)
+        forecast = await fetch_forecast(lat, lon)
     except WeatherServiceError as e:
         raise HTTPException(status_code=502, detail=str(e))
 

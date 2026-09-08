@@ -37,14 +37,6 @@ reuse the same cached data — Open-Meteo itself doesn't update much faster
 than hourly anyway, so this doesn't meaningfully affect freshness. Lower
 `weather_service._FORECAST_TTL` if you want tighter polling for a demo.
 
-## Dynamic India-first location resolution
-
-Chat location names are resolved at runtime through the Open-Meteo Geocoding API — there is no hard-coded city dictionary. `DEFAULT_COUNTRY_CODE=IN` applies the API's country filter, so ambiguous queries such as `Goa` resolve to an Indian result instead of an unrelated international match. The same resolver is used by both `POST /chat` and `WS /ws/chat`.
-
-The query parser also extracts the user's explicit location before the optional LLM step. This prevents the LLM from silently changing a place name (for example, `Goa` → `Genoa`). Explicit forecast durations such as `7 day forecast` are parsed and passed through to the weather API.
-
-Open-Meteo supports country-code filtering and forecast requests of up to 16 days. See the official documentation: https://open-meteo.com/en/docs/geocoding-api and https://open-meteo.com/en/docs.
-
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in your keys — never commit `.env`:
@@ -73,15 +65,9 @@ Then open:
 
 ## Run with Docker
 
-Always rebuild after changing Python source so Docker cannot keep an older image:
-
 ```bash
-docker compose down
-docker compose build --no-cache api
-docker compose up
+docker compose up --build
 ```
-
-The compose file explicitly sets `DEFAULT_COUNTRY_CODE=IN` for the API container.
 
 ## What changed for interactivity + performance
 
@@ -110,22 +96,6 @@ curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "crop advisory for Nashik", "language": "en"}'
 ```
-
-## Verify the dynamic resolver
-
-After starting the app, first verify the resolver itself:
-
-```text
-http://localhost:8000/location/resolve?name=Goa
-```
-
-The response should contain an Indian Goa coordinate and a resolved name containing `India`. Then test chat:
-
-```text
-Give me a 7 day forecast for Goa
-```
-
-If `/location/resolve?name=Goa` works but the chat still shows Genoa, the browser is connected to a different/stale server process. Check the browser URL/port and restart the API.
 
 ## What's implemented
 

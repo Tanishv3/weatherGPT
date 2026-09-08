@@ -6,8 +6,6 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://weathergpt:weathergpt@db:5432/weathergpt
       LLM_PROVIDER: none
-      DEFAULT_COUNTRY_CODE: IN
-      WEATHER_MODEL: gfs_seamless
     depends_on:
       - db
 

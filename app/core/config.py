@@ -1,29 +1,35 @@
-"""Central application configuration loaded from environment variables."""
-from pydantic_settings import BaseSettings, SettingsConfigDict
+"""
+Central configuration. All values are overridable via environment variables
+so the same code runs locally, in Docker, and in k8s.
+"""
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     app_name: str = "WeatherGPT"
-    app_version: str = "2.1-india-first-dynamic"
 
+    # --- Database ---
     database_url: str = "postgresql+asyncpg://weathergpt:weathergpt@db:5432/weathergpt"
 
-    llm_provider: str = "openai"
+    # --- LLM provider ---
+    # If no key is set, the NLU/composer layer falls back to rule-based logic
+    # so the app still runs end-to-end for a demo without any paid API.
+    # Values are read from environment / .env — never hardcode secrets here.
+    llm_provider: str = "openai"  # "openai" | "gemini" | "none"
     openai_api_key: str | None = None
     gemini_api_key: str | None = None
-    openai_model: str = "gpt-4o-mini"
-    gemini_model: str = "gemini-2.5-flash"
 
+    # --- Weather data source ---
+    # Open-Meteo requires no API key and is good enough for a working demo;
+    # swap for IMD/GFS-WRF outputs in production.
     weather_api_base: str = "https://api.open-meteo.com/v1/forecast"
     geocoding_api_base: str = "https://geocoding-api.open-meteo.com/v1/search"
 
-    # India-first geocoding. Set to empty/null only if you intentionally want
-    # global location matching.
-    default_country_code: str = "IN"
+    # --- Alerts ---
+    alert_poll_interval_seconds: int = 600
 
-    alert_poll_interval_seconds: int = 300
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    class Config:
+        env_file = ".env"
 
 
 settings = Settings()
