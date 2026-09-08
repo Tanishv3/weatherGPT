@@ -80,10 +80,10 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
     """Ask the LLM to phrase the already-computed structured data
     conversationally, in the requested language. Returns None on any
     failure so the caller falls back to the rule-based text."""
-    if settings.llm_provider != "openai" or not settings.openai_api_key:
+    provider = llm_client.active_provider()
+    if provider is None:
         return None
     try:
-        client = llm_client.get_openai_client()
         history_text = ""
         if history:
             history_text = "\nRecent conversation:\n" + "\n".join(
@@ -101,14 +101,21 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
             f"Weather data (JSON): {json.dumps(structured_data)[:3000]}"
             f"{history_text}"
         )
-        # Use the current Responses API for the live assistant. The model is
-        # selected here rather than hardcoding a canned answer path.
-        resp = await client.responses.create(
-            model="gpt-5.6-luna",
-            input=prompt,
-            max_output_tokens=250,
-        )
-        text = resp.output_text
+        if provider == "openai":
+            # Use the current Responses API for the live assistant.
+            client = llm_client.get_openai_client()
+            resp = await client.responses.create(
+                model="gpt-4o-mini",
+                input=prompt,
+                max_output_tokens=250,
+            )
+            text = resp.output_text
+        else:  # gemini
+            text = await llm_client.gemini_generate(
+                prompt,
+                max_output_tokens=250,
+                temperature=0.4,
+            )
         if not text:
             raise RuntimeError("The AI returned an empty response")
 
@@ -132,7 +139,7 @@ async def compose_reply(parsed: ParsedQuery, location_name: str, forecast: dict,
     # user's selected/detected language and the deterministic reply remains
     # the fallback if the LLM is unavailable.
     parsed.language = normalize_language(parsed.language)
-    if settings.llm_provider == "openai":
+    if settings.llm_provider in ("openai", "gemini"):
         # In AI mode the final response must come from the live LLM. The
         # deterministic reply above is retained only as structured context
         # and as a safety fallback when LLM_PROVIDER=none.

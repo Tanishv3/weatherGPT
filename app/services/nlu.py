@@ -8,11 +8,14 @@ keys, and gets smarter the moment a key is added — same interface either way.
 """
 import re
 import json
+import logging
 from datetime import date, timedelta
 
 from app.models.schemas import Intent, ParsedQuery
 from app.core.config import settings
 from app.services import llm_client
+
+logger = logging.getLogger("weathergpt.nlu")
 
 # Indian states/UTs and common cities. State names map to their capital so
 # queries such as "weather in Goa" or "rain in Maharashtra" always resolve
@@ -148,33 +151,45 @@ async def _llm_parse(text: str, language: str) -> ParsedQuery | None:
     key is configured, or if the call fails for any reason — a flaky LLM
     call should never take the whole app down.
     """
-    if settings.llm_provider != "openai" or not settings.openai_api_key:
+    provider = llm_client.active_provider()
+    if provider is None:
         return None
 
+    system_prompt = (
+        "You extract structured info from a weather-related user query, which "
+        "may be written in any Indian language or script. "
+        "Respond with ONLY a JSON object, no other text, with exactly these keys:\n"
+        '- "intent": one of "current_weather", "forecast", "alert_check", '
+        '"advisory", "historical", "unknown"\n'
+        '- "location_text": the place name mentioned, TRANSLITERATED to its '
+        "standard English/Latin-script spelling regardless of the query's "
+        "language or script (e.g. a query containing \"पुणे\" or \"பூனா\" "
+        'should still produce "Pune"), with NO time/date words in it (e.g. '
+        '"Pune" not "Pune tomorrow"). null if no place is mentioned.\n'
+        '- "days_ahead": integer 0-7, how many days forward the query refers '
+        'to (0 = now/today).'
+    )
+
     try:
-        client = llm_client.get_openai_client()
-        system_prompt = (
-            "You extract structured info from a weather-related user query. "
-            "Respond with ONLY a JSON object, no other text, with exactly these keys:\n"
-            '- "intent": one of "current_weather", "forecast", "alert_check", '
-            '"advisory", "historical", "unknown"\n'
-            '- "location_text": the place name mentioned, as a string, with NO '
-            "time/date words in it (e.g. \"Pune\" not \"Pune tomorrow\"). "
-            "null if no place is mentioned.\n"
-            '- "days_ahead": integer 0-7, how many days forward the query refers '
-            'to (0 = now/today).'
-        )
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-            max_tokens=150,
-        )
-        raw = resp.choices[0].message.content or "{}"
+        if provider == "openai":
+            client = llm_client.get_openai_client()
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_tokens=150,
+            )
+            raw = resp.choices[0].message.content or "{}"
+        else:  # gemini
+            raw = await llm_client.gemini_generate(
+                f"{system_prompt}\n\nUser query: {text!r}",
+                json_mode=True,
+                max_output_tokens=150,
+            )
         parsed_json = json.loads(raw)
 
         try:
@@ -201,8 +216,12 @@ async def _llm_parse(text: str, language: str) -> ParsedQuery | None:
             language=language,
             raw_text=text,
         )
-    except Exception:
-        # Network error, rate limit, malformed JSON, etc. — degrade gracefully.
+    except Exception as exc:
+        # Network error, rate limit, malformed JSON, etc. — degrade gracefully,
+        # but log it: a silent fallback here is what makes non-English
+        # location parsing quietly break, and this is the only place that
+        # explains why.
+        logger.warning("nlu._llm_parse failed, falling back to rule-based parsing: %s", exc)
         return None
 
 

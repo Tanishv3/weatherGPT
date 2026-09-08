@@ -5,12 +5,15 @@ LLM is used to detect the user's language and translate UI/data text while the
 selected language is cached in-process for efficiency.
 """
 import json
+import logging
 import re
 import time
 from typing import Iterable
 
 from app.core.config import settings
 from app.services import llm_client
+
+logger = logging.getLogger("weathergpt.language_service")
 
 # UI options are restricted to languages used in India. English remains the
 # internal fallback only; it is intentionally not exposed in the selector.
@@ -101,26 +104,36 @@ async def detect_language(text: str) -> str:
     local = detect_language_local(text)
     if local:
         return local
-    if settings.llm_provider != "openai" or not settings.openai_api_key:
+    provider = llm_client.active_provider()
+    if provider is None:
         return "en"
+    system_prompt = (
+        "Identify the language of the user's message. Return ONLY its ISO 639-1 "
+        "or ISO-compatible code. If it is an Indian language, use one of: "
+        + ", ".join(SUPPORTED_LANGUAGES.keys())
+        + ". Otherwise return en. Do not translate the message."
+    )
     try:
-        client = llm_client.get_openai_client()
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": (
-                    "Identify the language of the user's message. Return ONLY its ISO 639-1 "
-                    "or ISO-compatible code. If it is an Indian language, use one of: "
-                    + ", ".join(SUPPORTED_LANGUAGES.keys())
-                    + ". Otherwise return en. Do not translate the message."
-                )},
-                {"role": "user", "content": text[:1000]},
-            ],
-            temperature=0,
-            max_tokens=10,
-        )
-        return normalize_language(resp.choices[0].message.content)
-    except Exception:
+        if provider == "openai":
+            client = llm_client.get_openai_client()
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": text[:1000]},
+                ],
+                temperature=0,
+                max_tokens=10,
+            )
+            raw = resp.choices[0].message.content
+        else:  # gemini
+            raw = await llm_client.gemini_generate(
+                f"{system_prompt}\n\nMessage: {text[:1000]!r}",
+                max_output_tokens=10,
+            )
+        return normalize_language(raw)
+    except Exception as exc:
+        logger.warning("language_service.detect_language failed, defaulting to 'en': %s", exc)
         return "en"
 
 
@@ -142,13 +155,13 @@ async def translate_texts(texts: Iterable[str], language: str) -> list[str]:
             result.append("")
             missing.append((i, text))
 
-    if not missing or settings.llm_provider != "openai" or not settings.openai_api_key:
+    provider = llm_client.active_provider()
+    if not missing or provider is None:
         for i, text in missing:
             result[i] = text
         return result
 
     try:
-        client = llm_client.get_openai_client()
         payload = [{"id": i, "text": text} for i, text in missing]
         prompt = (
             f"Translate each text into {SUPPORTED_LANGUAGES.get(language, language)}. "
@@ -158,14 +171,24 @@ async def translate_texts(texts: Iterable[str], language: str) -> list[str]:
             "normally have a native-language form.\n\n"
             + json.dumps(payload, ensure_ascii=False)
         )
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0,
-            max_tokens=max(300, min(4000, len(missing) * 80)),
-        )
-        raw = json.loads(resp.choices[0].message.content or "{}")
+        max_tokens = max(300, min(4000, len(missing) * 80))
+        if provider == "openai":
+            client = llm_client.get_openai_client()
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_tokens=max_tokens,
+            )
+            raw_content = resp.choices[0].message.content or "{}"
+        else:  # gemini
+            raw_content = await llm_client.gemini_generate(
+                prompt,
+                json_mode=True,
+                max_output_tokens=max_tokens,
+            )
+        raw = json.loads(raw_content)
         rows = raw.get("translations", raw if isinstance(raw, list) else [])
         by_id = {int(row["id"]): str(row["translation"]) for row in rows if "id" in row and "translation" in row}
         for i, text in missing:
@@ -173,7 +196,8 @@ async def translate_texts(texts: Iterable[str], language: str) -> list[str]:
             result[i] = translated
             _cache[(language, text)] = (time.time() + _CACHE_TTL, translated)
         return result
-    except Exception:
+    except Exception as exc:
+        logger.warning("language_service.translate_texts failed for language=%s, returning source text: %s", language, exc)
         for i, text in missing:
             result[i] = text
         return result

@@ -96,6 +96,11 @@
   #language-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .language-chevron { font-size: .72rem; color: var(--muted); transition: transform .15s ease; }
   .language-picker.open .language-chevron { transform: rotate(180deg); }
+  .language-picker.loading .language-trigger { opacity: .7; cursor: wait; }
+  .language-picker.loading .language-globe {
+    display: inline-block; animation: lang-spin .8s linear infinite;
+  }
+  @keyframes lang-spin { to { transform: rotate(360deg); } }
 
   .language-menu {
     position: absolute; z-index: 100; top: calc(100% + 10px); right: 0;
@@ -416,6 +421,19 @@ function renderLanguageMenu() {
     button.setAttribute('aria-selected', option.value === languageSelect.value ? 'true' : 'false');
     button.innerHTML = `<span class="lang-icon" aria-hidden="true">${languageIcons[option.value] || '🌐'}</span><span class="lang-name"></span>`;
     button.querySelector('.lang-name').textContent = option.textContent;
+    // Prefetch on hover/focus: fires the same translate request the click
+    // will need, so by the time the user actually clicks, the server-side
+    // cache in language_service.py is already warm and the click resolves
+    // near-instantly instead of waiting on a fresh LLM round trip.
+    const prefetch = () => {
+      if (option.value === 'auto' || option.value === selectedLanguage) return;
+      const elements = [...document.querySelectorAll('[data-i18n]')];
+      const source = [...elements.map(el => el.dataset.i18n),
+        'Search city…', 'Ask about weather anywhere…', 'Language', 'Ask WeatherGPT'];
+      translateTexts(source, option.value === 'auto' ? 'en' : option.value);
+    };
+    button.addEventListener('mouseenter', prefetch, { once: true });
+    button.addEventListener('focus', prefetch, { once: true });
     button.addEventListener('click', async () => {
       languageSelect.value = option.value;
       languagePicker.classList.remove('open');
@@ -499,32 +517,59 @@ function i18nText(source) {
   return span.outerHTML;
 }
 
+let languageSwitchToken = 0;
+
 async function applyLanguage(language, {reloadDashboard = true} = {}) {
+  const myToken = ++languageSwitchToken;
   selectedLanguage = language || 'auto';
   localStorage.setItem('weathergpt-language', selectedLanguage);
   // Explicit language selection wins. Auto detect starts from English until a
   // message is analyzed, preventing stale language state when switching back.
   effectiveLanguage = selectedLanguage === 'auto' ? 'en' : selectedLanguage;
+
+  languagePicker.classList.add('loading');
+  languageTrigger.setAttribute('aria-busy', 'true');
+
   if (reloadDashboard && currentDashboard) {
     renderForecast(); renderAirQuality(); renderRainChart();
-    await localizeElements();
-    loadOtherCities(currentDashboard.resolved_name.split(',')[0]);
   }
-  await localizeElements();
-  const [searchPlaceholder, chatPlaceholder, languageTitle, askTitle] = await translateTexts([
-    'Search city…', 'Ask about weather anywhere…', 'Language', 'Ask WeatherGPT'
-  ], effectiveLanguage);
+
+  // Batch every visible data-i18n string plus the handful of dynamic
+  // placeholder/title strings into ONE translate request instead of two
+  // sequential ones (the previous version also called localizeElements()
+  // twice back-to-back here, doubling latency for no benefit) — this
+  // halves the round trips on every language switch.
+  const extraKeys = ['Search city…', 'Ask about weather anywhere…', 'Language', 'Ask WeatherGPT'];
+  const elements = [...document.querySelectorAll('[data-i18n]')];
+  const source = [...elements.map(el => el.dataset.i18n), ...extraKeys];
+  const translated = await translateTexts(source, effectiveLanguage);
+
+  // A newer language switch started while this one was still in flight
+  // (e.g. the user clicked a second option before the first request
+  // returned) — drop this stale result instead of letting it clobber the
+  // newer selection. The newer call owns clearing the loading state.
+  if (myToken !== languageSwitchToken) return;
+
+  elements.forEach((el, i) => { el.textContent = translated[i] ?? source[i]; });
+  const [searchPlaceholder, chatPlaceholder, languageTitle, askTitle] = translated.slice(elements.length);
+
   document.getElementById('search-input').placeholder = searchPlaceholder;
   document.getElementById('input').placeholder = chatPlaceholder;
   languageSelect.title = languageTitle;
   document.getElementById('chat-toggle').title = askTitle;
   document.documentElement.lang = effectiveLanguage;
+
+  if (reloadDashboard && currentDashboard) {
+    loadOtherCities(currentDashboard.resolved_name.split(',')[0]);
+  }
+
   const selected = [...languageSelect.options].find(o => o.value === selectedLanguage);
   if (selected) {
     languageCurrent.textContent = selected.textContent;
   }
   languageTrigger.title = languageTitle;
-  languagePicker.classList.remove('open');
+  languagePicker.classList.remove('open', 'loading');
+  languageTrigger.removeAttribute('aria-busy');
   languageTrigger.setAttribute('aria-expanded', 'false');
   languageMenu.querySelectorAll('.language-option').forEach(btn => {
     const active = btn.dataset.value === selectedLanguage;

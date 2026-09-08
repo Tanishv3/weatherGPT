@@ -2,10 +2,18 @@
 Central configuration. All values are overridable via environment variables
 so the same code runs locally, in Docker, and in k8s.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # NOTE: this MUST be model_config = SettingsConfigDict(...), not a nested
+    # `class Config: env_file = ...`. That old Pydantic v1-style pattern is
+    # not reliably honored by pydantic-settings v2 for its own options like
+    # env_file — it can silently do nothing, which is exactly what caused
+    # OPENAI_API_KEY to never load even though .env existed with the right
+    # content. extra="ignore" so unrelated leftover vars in .env don't error.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
     app_name: str = "WeatherGPT"
 
     # --- Database ---
@@ -28,9 +36,6 @@ class Settings(BaseSettings):
 
     # --- Alerts ---
     alert_poll_interval_seconds: int = 600
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()
