@@ -7,4 +7,4 @@ sqlalchemy[asyncio]==2.0.35
 asyncpg==0.29.0
 python-dotenv==1.0.1
 websockets==13.1
-openai==1.51.0
+openai>=2.6.1,<3

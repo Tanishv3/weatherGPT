@@ -4,13 +4,17 @@ from app.models.schemas import ChatRequest, ChatResponse
 from app.services.nlu import parse_query
 from app.services.weather_service import geocode_location, fetch_forecast, WeatherServiceError
 from app.services.composer import compose_reply
+from app.services.language_service import detect_language, normalize_language
 
 router = APIRouter()
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
-    parsed = await parse_query(req.message, req.language)
+    # Explicit selector wins. "auto" detects the language from the message.
+    requested_language = req.language.strip().lower()
+    language = await detect_language(req.message) if requested_language in {"", "auto", "detect"} else normalize_language(requested_language)
+    parsed = await parse_query(req.message, language)
 
     # Resolve location: prefer explicit coordinates from the client, else
     # geocode free text extracted from the message.
@@ -33,4 +37,4 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     reply, data = await compose_reply(parsed, location_name, forecast)
 
-    return ChatResponse(reply=reply, intent=parsed.intent, data=data, language=req.language)
+    return ChatResponse(reply=reply, intent=parsed.intent, data=data, language=language)

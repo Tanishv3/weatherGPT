@@ -16,8 +16,29 @@
     --accent-soft: #24314f;
     --warn: #ea580c;
     --warn-soft: #3a1f10;
+    --scroll-thumb: #30384d;
+    --scroll-thumb-hover: #4f8cff;
   }
   * { box-sizing: border-box; }
+
+  /* --- UI-matched scrollbars --- */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+    background-clip: padding-box;
+  }
+
   body {
     margin: 0;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -49,7 +70,67 @@
     background: var(--panel); color: var(--text); font-size: 0.9rem;
   }
   .search-wrap input:focus { outline: none; border-color: var(--accent); }
-  .topbar-right { display: flex; gap: 8px; margin-left: auto; }
+  .topbar-right { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+
+  /* --- Duolingo-style language picker (UI only) --- */
+  .language-picker { position: relative; flex: none; }
+  #language-select {
+    position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+  }
+  .language-trigger {
+    min-width: 148px; height: 38px; padding: 0 12px 0 13px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--panel); color: var(--text); cursor: pointer;
+    font: inherit; font-size: 0.82rem;
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .language-trigger:hover, .language-picker.open .language-trigger {
+    background: var(--panel-2); border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .language-trigger .lang-trigger-left {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+  }
+  .language-globe { font-size: 1rem; line-height: 1; }
+  #language-current { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .language-chevron { font-size: .72rem; color: var(--muted); transition: transform .15s ease; }
+  .language-picker.open .language-chevron { transform: rotate(180deg); }
+
+  .language-menu {
+    position: absolute; z-index: 100; top: calc(100% + 10px); right: 0;
+    width: min(430px, calc(100vw - 28px)); max-height: 430px; overflow-y: auto;
+    padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.38);
+    opacity: 0; visibility: hidden; transform: translateY(-5px) scale(.985);
+    transform-origin: top right; transition: opacity .14s ease, transform .14s ease, visibility .14s;
+  }
+  .language-picker.open .language-menu { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+  .language-menu::-webkit-scrollbar { width: 8px; }
+  .language-menu::-webkit-scrollbar-track { background: transparent; margin: 10px 0; }
+  .language-menu::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb); border-radius: 999px; border: 2px solid var(--panel);
+    background-clip: padding-box;
+  }
+  .language-menu::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+  .language-menu { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  .language-option {
+    min-height: 42px; padding: 8px 10px; border: 0; border-radius: 10px;
+    display: flex; align-items: center; gap: 9px; text-align: left;
+    background: transparent; color: var(--text); cursor: pointer; font: inherit; font-size: .82rem;
+  }
+  .language-option:hover { background: var(--panel-2); }
+  .language-option.active { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+  .language-option .lang-icon {
+    width: 24px; height: 18px; flex: none; display: grid; place-items: center;
+    font-size: 16px; line-height: 1;
+  }
+  .language-option .lang-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 600px) {
+    .language-menu { width: min(350px, calc(100vw - 20px)); grid-template-columns: 1fr; max-height: 60vh; }
+    .language-trigger { min-width: 130px; }
+  }
 
   /* --- Tabs row --- */
   .tabs-row {
@@ -95,7 +176,7 @@
   .hero-cond { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
   .hero-details { margin-top: 10px; font-size: 0.75rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
 
-  .strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .strip { display: flex; gap: 10px; overflow-x: auto; padding: 0 2px 6px; }
   .day-card {
     flex: 0 0 84px; background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 12px; padding: 10px 8px; text-align: center;
@@ -170,8 +251,8 @@
   .drawer-head h2 { margin: 0; font-size: 1rem; }
   #ws-status { font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; }
   #log {
-    flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
-    padding: 10px; background: var(--panel-2); border-radius: 10px; margin-bottom: 10px;
+    flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto;
+    padding: 10px 8px 10px 10px; background: var(--panel-2); border-radius: 10px; margin-bottom: 10px;
   }
   .msg { padding: 8px 12px; border-radius: 10px; max-width: 85%; white-space: pre-wrap; line-height: 1.4; font-size: 0.85rem; }
   .msg.user { align-self: flex-end; background: var(--accent); color: white; }
@@ -204,13 +285,23 @@
   <!-- Top bar -->
   <div class="topbar">
     <button class="icon-btn" id="chat-toggle" title="Ask WeatherGPT">💬</button>
-    <div class="place">📍 <strong id="place-name">Loading…</strong></div>
+    <div class="place">📍 <strong id="place-name" data-i18n="Detecting location…">Detecting location…</strong></div>
     <div class="search-wrap">
       <form id="search-form">
         <input id="search-input" type="text" placeholder="Search city…" autocomplete="off" />
       </form>
     </div>
     <div class="topbar-right">
+      <div class="language-picker" id="language-picker">
+        <select id="language-select" aria-label="Language" title="Language">
+          <option value="auto">Auto detect</option>
+        </select>
+        <button class="language-trigger" id="language-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" title="Language">
+          <span class="lang-trigger-left"><span class="language-globe" aria-hidden="true">🌐</span><span id="language-current">English</span></span>
+          <span class="language-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="language-menu" id="language-menu" role="listbox" aria-label="Choose language"></div>
+      </div>
       <button class="icon-btn" id="theme-toggle" title="Toggle theme">🌙</button>
     </div>
   </div>
@@ -218,13 +309,13 @@
   <!-- Tabs row -->
   <div class="tabs-row">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="today">Today</button>
-      <button class="tab-btn" data-tab="tomorrow">Tomorrow</button>
-      <button class="tab-btn" data-tab="week">Next 7 days</button>
+      <button class="tab-btn active" data-tab="today" data-i18n="Today">Today</button>
+      <button class="tab-btn" data-tab="tomorrow" data-i18n="Tomorrow">Tomorrow</button>
+      <button class="tab-btn" data-tab="week" data-i18n="Next 7 days">Next 7 days</button>
     </div>
     <div class="pill-group">
-      <button class="pill-btn active" data-pill="forecast">Forecast</button>
-      <button class="pill-btn" data-pill="air">Air quality</button>
+      <button class="pill-btn active" data-pill="forecast" data-i18n="Forecast">Forecast</button>
+      <button class="pill-btn" data-pill="air" data-i18n="Air quality">Air quality</button>
     </div>
   </div>
 
@@ -232,26 +323,26 @@
     <!-- Main column -->
     <div>
       <div class="panel" id="forecast-panel">
-        <div class="hero-row" id="hero-row"><div class="muted-note">Loading forecast…</div></div>
+        <div class="hero-row" id="hero-row"><div class="muted-note" data-i18n="Loading forecast…">Loading forecast…</div></div>
         <div class="strip" id="day-strip"></div>
       </div>
 
       <div class="panel" id="air-panel" style="display:none; margin-top:18px;">
-        <h2>Air quality</h2>
-        <div class="aqi-wrap" id="aqi-wrap"><div class="muted-note">Loading…</div></div>
+        <h2 data-i18n="Air quality">Air quality</h2>
+        <div class="aqi-wrap" id="aqi-wrap"><div class="muted-note" data-i18n="Loading…">Loading…</div></div>
       </div>
 
       <div class="panel" style="margin-top:18px;">
         <div class="panel-head">
-          <h2>Global map</h2>
-          <a class="link-btn" href="https://www.windy.com" target="_blank" rel="noopener">View wide</a>
+          <h2 data-i18n="Global map">Global map</h2>
+          <a class="link-btn" data-i18n="View wide" href="https://www.windy.com" target="_blank" rel="noopener">View wide</a>
         </div>
         <div class="map-area">
           <div class="map-dots"></div>
           <div class="map-card">
-            Explore a global map of wind, weather and ocean conditions.
+            <span data-i18n="Explore a global map of wind, weather and ocean conditions.">Explore a global map of wind, weather and ocean conditions.</span>
             <br />
-            <a class="link-btn" href="https://www.windy.com" target="_blank" rel="noopener">Explore map →</a>
+            <a class="link-btn" data-i18n="Explore map →" href="https://www.windy.com" target="_blank" rel="noopener">Explore map →</a>
           </div>
         </div>
       </div>
@@ -260,13 +351,13 @@
     <!-- Sidebar column -->
     <div>
       <div class="panel">
-        <h2>Chance of rain</h2>
-        <div class="rain-chart" id="rain-chart"><div class="muted-note">Loading…</div></div>
+        <h2 data-i18n="Chance of rain">Chance of rain</h2>
+        <div class="rain-chart" id="rain-chart"><div class="muted-note" data-i18n="Loading…">Loading…</div></div>
       </div>
 
       <div class="panel" style="margin-top:18px;">
-        <h2>Other cities</h2>
-        <div id="other-cities"><div class="muted-note">Loading…</div></div>
+        <h2 data-i18n="Other cities">Other cities</h2>
+        <div id="other-cities"><div class="muted-note" data-i18n="Loading…">Loading…</div></div>
       </div>
     </div>
   </div>
@@ -279,14 +370,14 @@
 <div class="drawer-overlay" id="drawer-overlay"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <h2>🌦️ Ask WeatherGPT</h2>
+    <h2 data-i18n="🌦️ Ask WeatherGPT">🌦️ Ask WeatherGPT</h2>
     <button class="icon-btn" id="drawer-close">✕</button>
   </div>
-  <div id="ws-status">connecting…</div>
+  <div id="ws-status" data-i18n="connecting…">connecting…</div>
   <div id="log"></div>
   <form id="form">
     <input id="input" type="text" placeholder="Ask about weather anywhere…" autocomplete="off" />
-    <button id="send" type="submit">Send</button>
+    <button id="send" type="submit" data-i18n="Send">Send</button>
   </form>
   <div class="examples">
     <button type="button" data-q="will it rain in Pune tomorrow?">rain in Pune tomorrow?</button>
@@ -297,9 +388,181 @@
 
 <script>
 // =====================================================================
+// Dynamic Indian-language support
+// =====================================================================
+// English is the default; users can switch to Auto detect or any supported language.
+let selectedLanguage = localStorage.getItem('weathergpt-language') || 'en';
+let effectiveLanguage = selectedLanguage === 'auto' ? 'en' : selectedLanguage;
+const languageSelect = document.getElementById('language-select');
+const languagePicker = document.getElementById('language-picker');
+const languageTrigger = document.getElementById('language-trigger');
+const languageCurrent = document.getElementById('language-current');
+const languageMenu = document.getElementById('language-menu');
+
+const languageIcons = {
+  auto:'✨', en:'🇺🇸', hi:'🇮🇳', mr:'🇮🇳', bn:'🇮🇳', te:'🇮🇳', ta:'🇮🇳',
+  gu:'🇮🇳', kn:'🇮🇳', ml:'🇮🇳', pa:'🇮🇳', or:'🇮🇳', as:'🇮🇳', ur:'🇮🇳', ne:'🇳🇵',
+  kok:'🇮🇳', mai:'🇮🇳', sa:'🇮🇳', mni:'🇮🇳', doi:'🇮🇳', ks:'🇮🇳', sd:'🇮🇳', sat:'🇮🇳', brx:'🇮🇳'
+};
+
+function renderLanguageMenu() {
+  languageMenu.innerHTML = '';
+  [...languageSelect.options].forEach(option => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'language-option' + (option.value === languageSelect.value ? ' active' : '');
+    button.dataset.value = option.value;
+    button.setAttribute('role', 'option');
+    button.setAttribute('aria-selected', option.value === languageSelect.value ? 'true' : 'false');
+    button.innerHTML = `<span class="lang-icon" aria-hidden="true">${languageIcons[option.value] || '🌐'}</span><span class="lang-name"></span>`;
+    button.querySelector('.lang-name').textContent = option.textContent;
+    button.addEventListener('click', async () => {
+      languageSelect.value = option.value;
+      languagePicker.classList.remove('open');
+      languageTrigger.setAttribute('aria-expanded', 'false');
+      await applyLanguage(option.value);
+      renderLanguageMenu();
+    });
+    languageMenu.appendChild(button);
+  });
+  const selected = languageSelect.options[languageSelect.selectedIndex];
+  if (selected) {
+    languageCurrent.textContent = selected.textContent;
+    languageTrigger.title = selected.textContent;
+  }
+}
+
+languageTrigger.addEventListener('click', () => {
+  const open = languagePicker.classList.toggle('open');
+  languageTrigger.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const active = languageMenu.querySelector('.language-option.active');
+    active?.scrollIntoView({block:'nearest'});
+  }
+});
+
+document.addEventListener('click', (event) => {
+  if (!languagePicker.contains(event.target)) {
+    languagePicker.classList.remove('open');
+    languageTrigger.setAttribute('aria-expanded', 'false');
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    languagePicker.classList.remove('open');
+    languageTrigger.setAttribute('aria-expanded', 'false');
+  }
+});
+
+async function loadLanguages() {
+  try {
+    const res = await fetch('/i18n/languages');
+    const data = await res.json();
+    for (const lang of (data.languages || [])) {
+      const option = document.createElement('option');
+      option.value = lang.code;
+      option.textContent = lang.name;
+      languageSelect.appendChild(option);
+    }
+    languageSelect.value = selectedLanguage;
+    renderLanguageMenu();
+    await applyLanguage(selectedLanguage, {reloadDashboard: false});
+    renderLanguageMenu();
+  } catch (_) {}
+}
+
+async function translateTexts(texts, language = effectiveLanguage) {
+  if (!texts.length || language === 'en') return texts;
+  try {
+    const res = await fetch('/i18n/translate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({texts, language})
+    });
+    if (!res.ok) return texts;
+    return (await res.json()).translations || texts;
+  } catch (_) { return texts; }
+}
+
+async function localizeElements(root = document) {
+  const elements = [...root.querySelectorAll('[data-i18n]')];
+  if (!elements.length) return;
+  const source = elements.map(el => el.dataset.i18n);
+  const translated = await translateTexts(source);
+  elements.forEach((el, i) => { el.textContent = translated[i] ?? source[i]; });
+}
+
+function i18nText(source) {
+  const span = document.createElement('span');
+  span.dataset.i18n = source;
+  span.textContent = source;
+  return span.outerHTML;
+}
+
+async function applyLanguage(language, {reloadDashboard = true} = {}) {
+  selectedLanguage = language || 'auto';
+  localStorage.setItem('weathergpt-language', selectedLanguage);
+  // Explicit language selection wins. Auto detect starts from English until a
+  // message is analyzed, preventing stale language state when switching back.
+  effectiveLanguage = selectedLanguage === 'auto' ? 'en' : selectedLanguage;
+  if (reloadDashboard && currentDashboard) {
+    renderForecast(); renderAirQuality(); renderRainChart();
+    await localizeElements();
+    loadOtherCities(currentDashboard.resolved_name.split(',')[0]);
+  }
+  await localizeElements();
+  const [searchPlaceholder, chatPlaceholder, languageTitle, askTitle] = await translateTexts([
+    'Search city…', 'Ask about weather anywhere…', 'Language', 'Ask WeatherGPT'
+  ], effectiveLanguage);
+  document.getElementById('search-input').placeholder = searchPlaceholder;
+  document.getElementById('input').placeholder = chatPlaceholder;
+  languageSelect.title = languageTitle;
+  document.getElementById('chat-toggle').title = askTitle;
+  document.documentElement.lang = effectiveLanguage;
+  const selected = [...languageSelect.options].find(o => o.value === selectedLanguage);
+  if (selected) {
+    languageCurrent.textContent = selected.textContent;
+  }
+  languageTrigger.title = languageTitle;
+  languagePicker.classList.remove('open');
+  languageTrigger.setAttribute('aria-expanded', 'false');
+  languageMenu.querySelectorAll('.language-option').forEach(btn => {
+    const active = btn.dataset.value === selectedLanguage;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+}
+
+languageSelect.addEventListener('change', async () => {
+  await applyLanguage(languageSelect.value);
+  renderLanguageMenu();
+});
+
+async function detectFromMessage(text) {
+  if (selectedLanguage !== 'auto') return effectiveLanguage;
+  try {
+    const res = await fetch('/i18n/detect', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})
+    });
+    if (res.ok) {
+      const data = await res.json();
+      effectiveLanguage = data.language || 'en';
+      document.documentElement.lang = effectiveLanguage;
+      if (effectiveLanguage !== 'en') {
+        await applyLanguage(effectiveLanguage);
+      }
+    }
+  } catch (_) {}
+  return effectiveLanguage;
+}
+
+loadLanguages();
+
+// =====================================================================
 // State
 // =====================================================================
 let currentDashboard = null; // last successful /dashboard/weather response
+let currentLocationQuery = null; // preserve the user's GPS coordinates for refreshes
 let activeTab = 'today';     // today | tomorrow | week
 let activePill = 'forecast'; // forecast | air
 
@@ -316,27 +579,70 @@ const rainChart = document.getElementById('rain-chart');
 const otherCitiesEl = document.getElementById('other-cities');
 
 async function loadDashboard(query) {
+  // Keep the exact location source (GPS or searched city) so periodic refreshes
+  // never silently replace GPS weather with a city-centre lookup.
+  currentLocationQuery = { ...query };
   const params = new URLSearchParams(query);
+  const requestedLocation = query.city ? String(query.city).trim() : '';
+
+  // Never leave the header stuck on "Loading…". Show the requested city
+  // immediately while the weather API is resolving it, or show a useful
+  // location status while browser coordinates are being resolved.
+  if (requestedLocation) {
+    // Show the user's search immediately; replace it with the API-resolved
+    // city/state as soon as the request completes.
+    placeNameEl.textContent = requestedLocation;
+  } else if (query.lat != null && query.lon != null) {
+    // Do not expose an artificial/hardcoded location name. The backend
+    // reverse-geocodes the actual browser coordinates and fills this in.
+    placeNameEl.textContent = '';
+    placeNameEl.removeAttribute('data-i18n');
+  }
+
   try {
     const res = await fetch(`/dashboard/weather?${params.toString()}`);
-    if (!res.ok) throw new Error('request failed');
+    let errorDetail = '';
+    if (!res.ok) {
+      try {
+        const err = await res.json();
+        errorDetail = err.detail || '';
+      } catch (_) {}
+      throw new Error(errorDetail || 'Weather request failed');
+    }
+
     const data = await res.json();
     currentDashboard = data;
-    placeNameEl.textContent = data.resolved_name;
+
+    // resolved_name comes from reverse geocoding for GPS coordinates or
+    // forward geocoding for a search; nothing is hardcoded here.
+    const [translatedPlace] = await translateTexts([data.resolved_name], effectiveLanguage);
+    placeNameEl.textContent = translatedPlace || data.resolved_name || requestedLocation;
+
     renderForecast();
     renderAirQuality();
     renderRainChart();
-    loadOtherCities(data.resolved_name.split(',')[0]);
+    await localizeElements();
+    await loadOtherCities(data.resolved_name.split(',')[0]);
   } catch (e) {
-    placeNameEl.textContent = 'Unavailable';
-    heroRow.innerHTML = '<div class="muted-note">Could not load weather for this location.</div>';
+    // Keep the user's searched location visible instead of replacing it with
+    // an endless loading state. For geolocation failures, show a clear status.
+    const fallback = requestedLocation || 'Location unavailable';
+    const [translatedFallback] = await translateTexts([fallback], effectiveLanguage);
+    placeNameEl.textContent = translatedFallback;
+
+    const message = e?.message && e.message !== 'Weather request failed'
+      ? e.message
+      : 'Could not load weather for this location.';
+    heroRow.innerHTML = `<div class="muted-note" data-i18n="${message.replace(/"/g, '&quot;')}">${message}</div>`;
+    await localizeElements(heroRow);
     dayStrip.innerHTML = '';
+    aqiWrap.innerHTML = '';
+    rainChart.innerHTML = '';
   }
 }
-
 function dowLabel(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  return DOW[d.getDay()];
+  return d.toLocaleDateString(effectiveLanguage === 'en' ? undefined : effectiveLanguage, { weekday: 'short' });
 }
 
 function renderForecast() {
@@ -365,13 +671,13 @@ function renderForecast() {
         <div class="hero-icon">${current.icon}</div>
         <div>
           <div class="hero-temp">${current.temperature ?? '—'}°</div>
-          <div class="hero-cond">${current.condition ?? ''}</div>
+          <div class="hero-cond" data-i18n="${current.condition ?? ''}">${current.condition ?? ''}</div>
         </div>
       </div>
       <div class="hero-details">
-        <span>Humidity: ${current.humidity ?? '—'}%</span>
-        <span>Wind: ${current.wind_kmh ?? '—'} km/h</span>
-        <span>Pressure: ${current.pressure_hpa ?? '—'} hPa</span>
+        <span data-i18n="Humidity: ${current.humidity ?? '—'}%">Humidity: ${current.humidity ?? '—'}%</span>
+        <span data-i18n="Wind: ${current.wind_kmh ?? '—'} km/h">Wind: ${current.wind_kmh ?? '—'} km/h</span>
+        <span data-i18n="Pressure: ${current.pressure_hpa ?? '—'} hPa">Pressure: ${current.pressure_hpa ?? '—'} hPa</span>
       </div>
     `;
   } else {
@@ -382,13 +688,13 @@ function renderForecast() {
         <div class="hero-icon">${heroDay.icon}</div>
         <div>
           <div class="hero-temp">${heroDay.temp_max}°</div>
-          <div class="hero-cond">${heroDay.condition}</div>
+          <div class="hero-cond" data-i18n="${heroDay.condition}">${heroDay.condition}</div>
         </div>
       </div>
       <div class="hero-details">
-        <span>Low: ${heroDay.temp_min}°</span>
-        <span>Rain chance: ${heroDay.rain_chance_pct ?? '—'}%</span>
-        <span>${heroDay.precipitation_mm} mm</span>
+        <span data-i18n="Low: ${heroDay.temp_min}°">Low: ${heroDay.temp_min}°</span>
+        <span data-i18n="Rain chance: ${heroDay.rain_chance_pct ?? '—'}%">Rain chance: ${heroDay.rain_chance_pct ?? '—'}%</span>
+        <span data-i18n="${heroDay.precipitation_mm} mm">${heroDay.precipitation_mm} mm</span>
       </div>
     `;
   }
@@ -423,18 +729,18 @@ function renderAirQuality() {
   if (!currentDashboard) return;
   const aqi = currentDashboard.aqi;
   if (!aqi || aqi.us_aqi == null) {
-    aqiWrap.innerHTML = '<div class="muted-note">Air quality data is unavailable for this location right now.</div>';
+    aqiWrap.innerHTML = '<div class="muted-note" data-i18n="Air quality data is unavailable for this location right now.">Air quality data is unavailable for this location right now.</div>';
     return;
   }
   const cat = aqiCategory(aqi.us_aqi);
   aqiWrap.innerHTML = `
     <div class="aqi-badge" style="border-color:${cat.color}">
-      ${aqi.us_aqi}<span>US AQI</span>
+      ${aqi.us_aqi}<span data-i18n="US AQI">US AQI</span>
     </div>
     <div class="aqi-meta">
-      <div><b>${cat.label}</b></div>
-      <div>PM2.5: ${aqi.pm2_5 ?? '—'} µg/m³</div>
-      <div>PM10: ${aqi.pm10 ?? '—'} µg/m³</div>
+      <div><b data-i18n="${cat.label}">${cat.label}</b></div>
+      <div data-i18n="PM2.5: ${aqi.pm2_5 ?? '—'} µg/m³">PM2.5: ${aqi.pm2_5 ?? '—'} µg/m³</div>
+      <div data-i18n="PM10: ${aqi.pm10 ?? '—'} µg/m³">PM10: ${aqi.pm10 ?? '—'} µg/m³</div>
     </div>
   `;
 }
@@ -460,7 +766,8 @@ async function loadOtherCities(exclude) {
     const res = await fetch(`/dashboard/other-cities?exclude=${encodeURIComponent(exclude || '')}`);
     const data = await res.json();
     if (!data.cities || data.cities.length === 0) {
-      otherCitiesEl.innerHTML = '<div class="muted-note">No data yet.</div>';
+      otherCitiesEl.innerHTML = '<div class="muted-note" data-i18n="No data yet.">No data yet.</div>';
+      await localizeElements(otherCitiesEl);
       return;
     }
     otherCitiesEl.innerHTML = '';
@@ -471,13 +778,15 @@ async function loadOtherCities(exclude) {
         <div class="name">${c.severe ? '⚠️ ' : ''}${c.name}</div>
         <div>
           <span>${c.temperature ?? '—'}°</span>
-          <div class="cond">${c.condition ?? ''}</div>
+          <div class="cond" data-i18n="${c.condition ?? ''}">${c.condition ?? ''}</div>
         </div>
       `;
       otherCitiesEl.appendChild(row);
     });
+    await localizeElements(otherCitiesEl);
   } catch (e) {
-    otherCitiesEl.innerHTML = '<div class="muted-note">Could not load.</div>';
+    otherCitiesEl.innerHTML = '<div class="muted-note" data-i18n="Could not load.">Could not load.</div>';
+    await localizeElements(otherCitiesEl);
   }
 }
 
@@ -501,10 +810,11 @@ document.querySelectorAll('.pill-btn').forEach(btn => {
 });
 
 // --- Search ---
-document.getElementById('search-form').addEventListener('submit', (e) => {
+document.getElementById('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const val = document.getElementById('search-input').value.trim();
   if (!val) return;
+  await detectFromMessage(val);
   loadDashboard({ city: val });
 });
 
@@ -519,24 +829,37 @@ themeBtn.addEventListener('click', () => {
   document.documentElement.style.setProperty('--border', isLight ? '#dde3f0' : '#262d3d');
   document.documentElement.style.setProperty('--text', isLight ? '#161a23' : '#e8ecf3');
   document.documentElement.style.setProperty('--muted', isLight ? '#5b6478' : '#8b93a7');
+  document.documentElement.style.setProperty('--scroll-thumb', isLight ? '#c5ccda' : '#30384d');
+  document.documentElement.style.setProperty('--scroll-thumb-hover', isLight ? '#4f8cff' : '#6fa3ff');
   themeBtn.textContent = isLight ? '☀️' : '🌙';
 });
 
-// --- Initial load: try browser geolocation, fall back to a default city ---
+// --- Initial load: use the browser's actual location ---
 function initDashboard() {
-  if ('geolocation' in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => loadDashboard({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-      () => loadDashboard({ city: 'New Delhi' }),
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
-    );
-  } else {
-    loadDashboard({ city: 'New Delhi' });
+  if (!('geolocation' in navigator)) {
+    placeNameEl.textContent = 'Location unavailable';
+    return;
   }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      loadDashboard({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+    },
+    () => {
+      // Never substitute a hardcoded city for the user's current location.
+      // A fallback city can be misleading, especially when the user is travelling.
+      placeNameEl.textContent = 'Location unavailable';
+      placeNameEl.removeAttribute('data-i18n');
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 5 * 60 * 1000 }
+  );
 }
 initDashboard();
+setTimeout(() => localizeElements(), 200);
 setInterval(() => {
-  if (currentDashboard) loadDashboard({ city: currentDashboard.resolved_name.split(',')[0] });
+  // Refresh using the same GPS coordinates instead of converting the current
+  // location into a city search (which can move the weather point).
+  if (currentLocationQuery) loadDashboard(currentLocationQuery);
 }, 10 * 60 * 1000);
 
 // =====================================================================
@@ -580,45 +903,113 @@ function showToast(message) {
 }
 
 const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-const ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+const wsUrl = `${proto}://${location.host}/ws/chat`;
+let ws = null;
 let typingEl = null;
+let reconnectTimer = null;
+let reconnectDelay = 1000;
+let manuallyClosed = false;
 
-ws.onopen = () => { wsStatus.textContent = 'connected'; };
-ws.onclose = () => { wsStatus.textContent = 'disconnected — refresh to reconnect'; sendBtn.disabled = true; };
-ws.onerror = () => { wsStatus.textContent = 'connection error'; };
+function setChatStatus(text, connected = false) {
+  wsStatus.textContent = text;
+  wsStatus.classList.toggle('connected', connected);
+}
 
-ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  if (msg.type === 'status' && msg.status === 'thinking') {
-    typingEl = addMsg('WeatherGPT is thinking…', 'typing');
+async function connectChat() {
+  if (manuallyClosed || (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))) return;
+
+  clearTimeout(reconnectTimer);
+  setChatStatus((await translateTexts(['connecting…']))[0], false);
+
+  try {
+    ws = new WebSocket(wsUrl);
+  } catch (err) {
+    scheduleReconnect();
     return;
   }
-  if (msg.type === 'reply') {
-    if (typingEl) { typingEl.remove(); typingEl = null; }
-    addMsg(msg.reply, 'bot');
+
+  ws.onopen = async () => {
+    reconnectDelay = 1000;
     sendBtn.disabled = false;
-    return;
-  }
-  if (msg.type === 'error') {
-    if (typingEl) { typingEl.remove(); typingEl = null; }
-    addMsg('⚠️ ' + msg.message, 'bot');
-    sendBtn.disabled = false;
-    return;
-  }
-  if (msg.type === 'alert') {
-    // Unsolicited push from the background monitor. Show it in the chat
-    // log AND as a toast, since the drawer may not be open when it arrives.
-    addMsg(msg.message, 'alert');
-    showToast(msg.message);
-  }
-};
+    setChatStatus((await translateTexts(['connected']))[0], true);
+  };
 
-function send(text) {
-  if (!text.trim() || ws.readyState !== WebSocket.OPEN) return;
+  ws.onclose = async () => {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+    sendBtn.disabled = true;
+    setChatStatus((await translateTexts(['disconnected — reconnecting…']))[0], false);
+    scheduleReconnect();
+  };
+
+  ws.onerror = async () => {
+    setChatStatus((await translateTexts(['connection error — retrying…']))[0], false);
+    // onclose will perform the actual reconnect.
+  };
+
+  ws.onmessage = async (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); }
+    catch { return; }
+
+    if (msg.type === 'ready') {
+      const label = msg.mode === 'ai' ? 'connected • AI + live weather' : 'connected • live weather';
+      setChatStatus(label, true);
+      return;
+    }
+    if (msg.type === 'status' && msg.status === 'thinking') {
+      if (typingEl) typingEl.remove();
+      typingEl = addMsg((await translateTexts(['WeatherGPT is thinking…']))[0], 'typing');
+      return;
+    }
+    if (msg.type === 'reply') {
+      if (typingEl) { typingEl.remove(); typingEl = null; }
+      addMsg(msg.reply, 'bot');
+      setChatStatus(msg.mode === 'ai' ? 'connected • AI + live weather' : 'connected • live weather', true);
+      sendBtn.disabled = false;
+      return;
+    }
+    if (msg.type === 'error') {
+      if (typingEl) { typingEl.remove(); typingEl = null; }
+      addMsg('⚠️ ' + msg.message, 'bot');
+      sendBtn.disabled = false;
+      setChatStatus('connected • live weather', true);
+      return;
+    }
+    if (msg.type === 'alert') {
+      addMsg(msg.message, 'alert');
+      showToast(msg.message);
+    }
+  };
+}
+
+function scheduleReconnect() {
+  if (manuallyClosed || reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectChat();
+  }, reconnectDelay);
+  reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+}
+
+connectChat();
+
+async function send(text) {
+  if (!text.trim()) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addMsg((await translateTexts(['Chat is reconnecting. Please try again in a moment.']))[0], 'bot');
+    connectChat();
+    return;
+  }
   addMsg(text, 'user');
   sendBtn.disabled = true;
-  ws.send(JSON.stringify({ message: text, language: 'en' }));
-  input.value = '';
+  try {
+    const lang = await detectFromMessage(text);
+    ws.send(JSON.stringify({ message: text, language: lang }));
+    input.value = '';
+  } catch (err) {
+    sendBtn.disabled = false;
+    addMsg('⚠️ Unable to send the message. Please try again.', 'bot');
+  }
 }
 
 form.addEventListener('submit', (e) => {

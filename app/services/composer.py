@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.schemas import Intent, ParsedQuery
 from app.services import llm_client
 from app.services.weather_service import describe_weather_code, is_severe
+from app.services.language_service import normalize_language
 
 
 def _rule_based_reply(parsed: ParsedQuery, location_name: str, forecast: dict) -> tuple[str, dict]:
@@ -75,7 +76,7 @@ def _rule_based_reply(parsed: ParsedQuery, location_name: str, forecast: dict) -
     return reply, {"current": current}
 
 
-async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: dict) -> str | None:
+async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: dict, history: list[dict] | None = None) -> str | None:
     """Ask the LLM to phrase the already-computed structured data
     conversationally, in the requested language. Returns None on any
     failure so the caller falls back to the rule-based text."""
@@ -83,6 +84,11 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
         return None
     try:
         client = llm_client.get_openai_client()
+        history_text = ""
+        if history:
+            history_text = "\nRecent conversation:\n" + "\n".join(
+                f"{item.get('role', 'user')}: {item.get('content', '')}" for item in history[-10:]
+            )
         prompt = (
             "You are WeatherGPT, a helpful weather assistant. Reply in "
             f"language code '{parsed.language}'. Be concise (2-4 sentences), "
@@ -93,31 +99,44 @@ async def _llm_reply(parsed: ParsedQuery, location_name: str, structured_data: d
             f"Intent: {parsed.intent.value}\n"
             f"Location: {location_name}\n"
             f"Weather data (JSON): {json.dumps(structured_data)[:3000]}"
+            f"{history_text}"
         )
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=250,
+        # Use the current Responses API for the live assistant. The model is
+        # selected here rather than hardcoding a canned answer path.
+        resp = await client.responses.create(
+            model="gpt-5.6-luna",
+            input=prompt,
+            max_output_tokens=250,
         )
-        text = resp.choices[0].message.content
+        text = resp.output_text
         if not text:
-            return None
+            raise RuntimeError("The AI returned an empty response")
 
-        # The LLM is only a language formatter. Never allow it to replace
-        # the API-resolved location or factual weather values. If it appears
-        # to change the location, use the deterministic API-backed reply.
-        if location_name.lower() not in text.lower():
-            return None
-
+        # The LLM is the conversational layer; the weather API data remains
+        # the source of truth for factual weather values.
         return text.strip()
-    except Exception:
-        # Network error, rate limit, auth failure, etc. — degrade gracefully.
+    except Exception as exc:
+        # Keep the chatbot usable when the optional AI provider is unavailable
+        # (invalid/expired key, quota, network outage, SDK error, etc.). The
+        # caller already has fresh weather data, so returning None lets it use
+        # the live API-backed response instead of showing a fake AI error.
+        import logging
+        logging.getLogger("weathergpt.llm").warning("AI response unavailable; using live weather fallback: %s", exc)
         return None
 
 
-async def compose_reply(parsed: ParsedQuery, location_name: str, forecast: dict) -> tuple[str, dict]:
+async def compose_reply(parsed: ParsedQuery, location_name: str, forecast: dict, history: list[dict] | None = None) -> tuple[str, dict]:
     rule_reply, data = _rule_based_reply(parsed, location_name, forecast)
-    # Keep the API-backed deterministic reply as the final source of truth.
-    # The LLM must never be able to replace Indian locations or live values.
+    # Translate the complete generated answer dynamically. There is no static
+    # translation dictionary: the LLM formats the API-backed facts in the
+    # user's selected/detected language and the deterministic reply remains
+    # the fallback if the LLM is unavailable.
+    parsed.language = normalize_language(parsed.language)
+    if settings.llm_provider == "openai":
+        # In AI mode the final response must come from the live LLM. The
+        # deterministic reply above is retained only as structured context
+        # and as a safety fallback when LLM_PROVIDER=none.
+        translated = await _llm_reply(parsed, location_name, data, history)
+        return (translated or rule_reply), data
+
     return rule_reply, data

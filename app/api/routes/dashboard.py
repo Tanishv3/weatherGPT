@@ -6,6 +6,7 @@ from app.services.weather_service import (
     fetch_air_quality,
     fetch_forecast,
     geocode_location,
+    reverse_geocode_location,
     is_severe,
     weather_icon,
 )
@@ -30,7 +31,8 @@ async def dashboard_weather(
         except WeatherServiceError as e:
             raise HTTPException(status_code=502, detail=str(e))
     elif lat is not None and lon is not None:
-        latitude, longitude, resolved_name = lat, lon, "Your Location"
+        latitude, longitude = lat, lon
+        resolved_name = await reverse_geocode_location(latitude, longitude)
     else:
         raise HTTPException(status_code=422, detail="Provide either `city` or both `lat` and `lon`.")
 

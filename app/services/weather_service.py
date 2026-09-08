@@ -129,6 +129,71 @@ async def geocode_location(place_name: str) -> tuple[float, float, str]:
     return result
 
 
+async def reverse_geocode_location(latitude: float, longitude: float) -> str:
+    """Resolve browser coordinates to a human-readable location dynamically.
+
+    The browser supplies the actual GPS coordinates. Nominatim converts those
+    coordinates to the nearest city/town/village and state; no city name is
+    hardcoded into the frontend. Multiple zoom levels are attempted so dense
+    urban areas and smaller towns both resolve reliably.
+    """
+    cache_key = f"reverse:{round(latitude, 4)}:{round(longitude, 4)}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return str(cached)
+
+    last_error = None
+    for zoom in (12, 10, 8):
+        try:
+            resp = await _get_client().get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    "lat": latitude,
+                    "lon": longitude,
+                    "format": "jsonv2",
+                    "zoom": zoom,
+                    "addressdetails": 1,
+                    "accept-language": "en",
+                },
+                headers={
+                    "User-Agent": "WeatherGPT/1.0 (location lookup)",
+                    "Accept": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            address = payload.get("address", {}) if isinstance(payload, dict) else {}
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = exc
+            continue
+
+        # Prefer the actual municipality/town/city. Do NOT use city_district,
+        # county, or state_district as the primary city: those are administrative
+        # regions and can make the header show a nearby/wrong place.
+        city = (
+            address.get("city")
+            or address.get("town")
+            or address.get("municipality")
+            or address.get("village")
+            or address.get("suburb")
+            or address.get("locality")
+        )
+        state = address.get("state")
+
+        if city and state:
+            name = f"{city}, {state}"
+        else:
+            name = city or state
+
+        if name:
+            _cache_set(cache_key, name, _GEOCODE_TTL)
+            return name
+
+    # If reverse geocoding is temporarily unavailable, return coordinates
+    # rather than a misleading hardcoded place such as "Your Location".
+    return f"{latitude:.5f}, {longitude:.5f}"
+
+
 async def fetch_forecast(latitude: float, longitude: float, days: int = 3) -> dict:
     """Fetch current + daily forecast for a coordinate. Cached ~10 min,
     rounded to ~1km grid so nearby requests share a cache entry."""
